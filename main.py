@@ -1,172 +1,118 @@
-import os
+import pandas as pd
 import json
-import time
-from engine import WorkoutEngine
-from schema import AIWorkoutAnalysis
-
-# ==========================================
-# API CLIENT INITIALIZATION
-# ==========================================
-
-# --- GROQ (Active) ---
 from groq import Groq
-client = Groq()
+from engine import ProgressionEngine
 
-# --- GEMINI (Commented Out) ---
-# from google import genai
-# client = genai.Client()
+def get_active_issues(muscle_group, issues_path='issue_log.csv'):
+    try:
+        issues = pd.read_csv(issues_path)
+        active = issues[(issues['muscle_group'] == muscle_group) & (issues['status'] == 'Active')]
+        return active[['exercise', 'issue_type', 'description', 'date_flagged']].to_dict(orient='records')
+    except FileNotFoundError:
+        return []
 
-# ==========================================
+def get_healthy_exercises(target_date, muscle_group, logs_path, flagged_exercises):
+    logs = pd.read_csv(logs_path)
+    session_logs = logs[(logs['date'] == target_date) & (logs['muscle_group'] == muscle_group)]
+    all_exercises_today = session_logs['exercise'].unique()
+    return [ex for ex in all_exercises_today if ex not in flagged_exercises]
 
-def needs_ai_intervention(notes, history):
-    """The Router: Triggers the Slow Path for notes OR performance regressions."""
-    has_notes = isinstance(notes, str) and notes.strip() != ""
-    if has_notes:
-        return True, "User provided notes."
-        
-    if len(history) >= 2:
-        last_session = history.iloc[-1]
-        prev_session = history.iloc[-2]
-        
-        last_weight = max(last_session['Weight (kg)'])
-        prev_weight = max(prev_session['Weight (kg)'])
-        
-        last_reps = max([r for w, r in zip(last_session['Weight (kg)'], last_session['Reps']) if w == last_weight])
-        prev_reps = max([r for w, r in zip(prev_session['Weight (kg)'], prev_session['Reps']) if w == prev_weight])
-        
-        if last_weight < prev_weight:
-            return True, f"Regression: Weight dropped from {prev_weight}kg to {last_weight}kg."
-            
-        if last_weight == prev_weight and last_reps < prev_reps:
-            return True, f"Regression: Reps dropped from {prev_reps} to {last_reps} at {last_weight}kg."
-            
-        if len(history) >= 3:
-            prev2_session = history.iloc[-3]
-            prev2_weight = max(prev2_session['Weight (kg)'])
-            prev2_reps = max([r for w, r in zip(prev2_session['Weight (kg)'], prev2_session['Reps']) if w == prev2_weight])
-            
-            if last_weight <= prev2_weight and last_reps <= prev2_reps:
-                return True, f"Stalling: No net progress over 3 sessions."
-
-    return False, "Clear path. Progressing normally."
-
-def get_ai_coaching(exercise_name, history, default_target, notes, trigger_reason):
-    """The Slow Path: Calls the LLM to get an override decision."""
+def call_ai_coach(payload, client):
+    """Sends the cross-contextual payload to the real LLM."""
+    print("\n[AI COACH ANALYZING PAYLOAD...]")
     
-    recent_history = history.tail(3).to_dict(orient='records')
-    
+    # We will build out a robust prompt later. 
+    # For now, this just passes the raw JSON to test the connection.
     prompt = f"""
-    You are an elite biomechanics and strength coach. 
-    The user is performing: {exercise_name}
+    You are an expert strength coach. Analyze the following workout data and provide a JSON response.
+    The user's actual strength (e1rm) dropped below their target, or they reported a problem.
+    1. your goal is to help the user resolve their problems if any , or if their strength declined , help them get back on track with a new progression/variation/suggestion to plan .
+    2. Provide fitness advice considering the user's current performance/strength level, any reported issues, and historical context.
+    3. analyze the flagged exercises with data on other exercises of the same muscle group to diagonize the issue properly and solve it .
+    4. before you suggest a new progression , check if the user is stalling or if they are just having a bad day and provide a solution accordingly .
+    5. If you suggest a new progression, provide the new target weight, reps, and RIR for the next session , like a professional coach would do. make sure the numbers are reasonable and not exxagerated , or too low . also provide cues for form and recovery if needed .
+    Data: {json.dumps(payload, indent=2)}
     
-    The deterministic system routed this exercise to you because: {trigger_reason}
-    
-    Recent History (Last 3 sessions):
-    {json.dumps(recent_history, indent=2, default=str)}
-    
-    The deterministic algorithm suggests this default next target:
-    {json.dumps(default_target, indent=2, default=str)}
-    
-    User's Notes from the last session: "{notes}"
-    
-    INSTRUCTIONS:
-    1. Read the trigger reason and the user's notes.
-    2. If the user is stalling, regressing, or reporting pain/form breakdown, set `is_override` to True and provide a new target weight/reps (e.g., a deload) or a `suggested_variation`.
-    3. If the notes are strictly positive and progress is fine, set `is_override` to False, let the algorithm's target stand, and offer brief encouragement in `coach_feedback`.
-    4. Provide specific biomechanical cues or progression advice in `coach_feedback` addressing the stall or form issues.
-    5. look for advice based on the user's current strength level , irrespetive of generic advice .
-
-    
-    OUTPUT FORMAT:
-    You MUST output valid JSON matching this schema. Do not include markdown code blocks, just raw JSON:
-    {AIWorkoutAnalysis.model_json_schema()}
+    Respond STRICTLY with JSON matching this format:
+    {{
+        "analysis": "Brief biomechanical explanation of the issue.",
+        "adjustments": [
+            {{
+                "exercise": "Exercise Name",
+                "new_target_weight_kg": 0.0,
+                "new_target_reps": 0,
+                "new_target_rir": 0,
+                "ai_instructions": "Brief cue or instruction."
+            }}
+        ]
+    }}
     """
-    
-    # ==========================================
-    # GROQ IMPLEMENTATION (Active)
-    # ==========================================
-    response = client.chat.completions.create(
-        model="openai/gpt-oss-120b",
-        messages=[
-            {"role": "system", "content": "You are a professional strength and conditioning AI. You output strictly valid JSON."},
-            {"role": "user", "content": prompt}
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.7  
-    )
-    
-    raw_json_string = response.choices[0].message.content
-    parsed_response = AIWorkoutAnalysis.model_validate_json(raw_json_string)
-    return parsed_response
 
-    # ==========================================
-    # GEMINI IMPLEMENTATION (Commented Out)
-    # ==========================================
-    # max_retries = 3
-    # for attempt in range(max_retries):
-    #     try:
-    #         response = client.models.generate_content(
-    #             model='gemini-3.5-flash-lite',
-    #             contents=prompt,
-    #             config={
-    #                 'response_mime_type': 'application/json',
-    #                 'response_schema': AIWorkoutAnalysis,
-    #                 'temperature': 0.2, # Change to 0.7-0.9 for a more conversational coaching tone
-    #                 'thinking_config': {'thinking_budget': 0}
-    #             }
-    #         )
-    #         return response.parsed
-    #         
-    #     except Exception as e:
-    #         if attempt < max_retries - 1:
-    #             print(f"      [Server busy... retrying in 5 seconds (Attempt {attempt + 2}/{max_retries})]")
-    #             time.sleep(5)
-    #         else:
-    #             raise e
+    try:
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-20b", 
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        print(f"API Error: {e}")
+        return None
 
-def run_pipeline():
-    csv_path = 'workout_logs.csv'
-    engine = WorkoutEngine(csv_path)
+def run_pipeline(target_date, api_key):
+    client = Groq(api_key=api_key)
+    engine = ProgressionEngine()
     
-    exercise_to_test = "Squats" 
-    target_date = "2026-03-23"
+    print(f"\n--- RUNNING SESSION ANALYSIS FOR {target_date} ---")
+    fast_path_updates, ai_routing_queue = engine.sweep_session(target_date)
     
-    history = engine.get_exercise_history(exercise_to_test, up_to_date=target_date)
-    if history is None:
-        print(f"No data found for {exercise_to_test}.")
-        return
-
-    default_target, notes = engine.calculate_default_progression(history)
-    
-    print(f"--- {exercise_to_test.upper()} PIPELINE ---")
-    print(f"Algorithm Target: {default_target['weight_kg']}kg for {default_target['reps']} ({default_target['action']})")
-    print(f"User Notes: '{notes}'")
-    
-    needs_ai, trigger_reason = needs_ai_intervention(notes, history)
-    
-    if needs_ai:
-        print(f"\n=> AI Triggered. Reason: {trigger_reason}")
-        print("=> Consulting AI API...")
-        try:
-            ai_feedback = get_ai_coaching(exercise_to_test, history, default_target, notes, trigger_reason)
+    if fast_path_updates:
+        print("\n✅ FAST PATH (DETERMINISTIC INCREMENTS):")
+        for update in fast_path_updates:
+            print(f"  - {update['exercise']}: target updated to {update['target_weight_kg']}kg x {update['target_reps']} @ RIR {update['target_rir']}")
             
-            if ai_feedback.is_override:
-                print("\n⚠️ AI OVERRIDE ACTIVATED ⚠️")
-                if ai_feedback.suggested_variation:
-                    print(f"New Exercise: {ai_feedback.suggested_variation}")
-                if ai_feedback.override_weight_kg:
-                    print(f"New Target Weight: {ai_feedback.override_weight_kg}kg")
-                if ai_feedback.override_reps:
-                    print(f"New Target Reps: {ai_feedback.override_reps}")
-            else:
-                print("\n✅ AI Approved Algorithm Target.")
-                
-            print(f"\nCoach Feedback: {ai_feedback.coach_feedback}")
+    if ai_routing_queue:
+        print("\n⚠️ AI INTERVENTION REQUIRED:")
+        
+        grouped_issues = {}
+        for item in ai_routing_queue:
+            mg = item['muscle_group']
+            if mg not in grouped_issues:
+                grouped_issues[mg] = []
+            grouped_issues[mg].append(item)
             
-        except Exception as e:
-            print(f"AI Call Failed: {e}")
-    else:
-        print(f"\n=> No AI needed. {trigger_reason} Cost: $0.00.")
+        for mg, flags in grouped_issues.items():
+            print(f"\nGathering context for muscle group: [{mg}]...")
+            
+            flagged_names = [f['exercise'] for f in flags]
+            ai_payload = {
+                "muscle_group": mg,
+                "flagged_exercises": flags,
+                "healthy_exercises_today": get_healthy_exercises(target_date, mg, 'workout_logs.csv', flagged_names),
+                "historical_active_issues": get_active_issues(mg)
+            }
+            
+            ai_prescription = call_ai_coach(ai_payload, client)
+            
+            if ai_prescription:
+                print("\n🧠 AI PRESCRIPTION:")
+                print(f"  Diagnosis: {ai_prescription['analysis']}")
+                for adj in ai_prescription['adjustments']:
+                    print(f"  - {adj['exercise']} Target Updated: {adj['new_target_weight_kg']}kg x {adj['new_target_reps']} @ RIR {adj['new_target_rir']}")
+                    print(f"  - Cue: {adj['ai_instructions']}")
+                    
+                print("\n📝 PROPOSED ISSUE LOG UPDATES:")
+                for f in flags:
+                    print(f"  - APPEND TO issue_log.csv: {target_date} | {f['exercise']} | {mg} | {f['status']} | {f['problem_note']} | Active")
+
+import os
 
 if __name__ == "__main__":
-    run_pipeline()
+    # Pull the key securely from the system's environment variables
+    api_key = os.environ.get("GROQ_API_KEY")
+    
+    if not api_key:
+        print("Error: GROQ_API_KEY environment variable not found.")
+        print("Run this in your terminal first: $env:GROQ_API_KEY=\"your_key_here\"")
+    else:
+        run_pipeline('2026-03-10', api_key)

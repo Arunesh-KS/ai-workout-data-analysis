@@ -11,9 +11,9 @@ class AIWorkoutAnalysis(BaseModel):
         default=None,
         description="The new suggested weight in kg. Use this if recommending a deload or a different exercise variation."
     )
-    override_reps: Optional[str] = Field(
+    override_reps: Optional[int] = Field(
         default=None,
-        description="The new suggested rep range (e.g., '12-15' for joint recovery or '5-8' for strength blocks)."
+        description="The new suggested rep count (e.g., around 12-15 for joint recovery or  around 5-8 for strength blocks . also give the starting rep )."
     )
     suggested_variation: Optional[str] = Field(
         default=None,
@@ -22,5 +22,5 @@ class AIWorkoutAnalysis(BaseModel):
     
     # Always provided to give the user context
     coach_feedback: str = Field(
-        description="Actionable advice addressing the specific notes or stalling. If notes were positive (e.g., 'felt great'), just provide brief encouragement."
+        description="Actionable advice addressing the specific notes or stalling. if weights , reps were adjusted , also provide the rep range , give cues for form ."
     )
