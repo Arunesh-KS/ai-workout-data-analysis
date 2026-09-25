@@ -1,7 +1,18 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
+class IssueLogUpdate(BaseModel):
+    date_flagged: str
+    exercise: str
+    muscle_group: str
+    issue_type: str
+    description: str = Field(description="The original user note or stall description.")
+    status: str = Field(default="Active")
+    # ADD THIS LINE:
+    ai_advice: str = Field(description="A concise summary of the diagnosis, cues, and target adjustments prescribed today.")
+
 class AIWorkoutAnalysis(BaseModel):
+    
     is_override: bool = Field(
         description="Set to True ONLY IF the user is stalling, reports pain/injury, or requires a variation. Set to False if the notes are positive or no changes to the default progression are needed."
     )
@@ -24,3 +35,4 @@ class AIWorkoutAnalysis(BaseModel):
     coach_feedback: str = Field(
         description="Actionable advice addressing the specific notes or stalling. if weights , reps were adjusted , also provide the rep range , give cues for form ."
     )
+    issue_log_append: Optional[IssueLogUpdate] = None

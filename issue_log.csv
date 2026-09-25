@@ -1,4 +1,7 @@
-id,date_flagged,exercise,muscle_group,issue_type,description,status
-1,2026-02-15,Lat Pulldown,Vertical Pull,Stall,No strength progression over 3 sessions.,Rectified
-2,2026-03-08,Bench Press,Horizontal Push,Problem,Left front delt feels tweaky at the bottom,Active
-3,2026-03-10,Squats,Quad/Glute,Problem,Knees caving inwards on the way up,Active
+id,date_flagged,exercise,muscle_group,issue_type,description,status,ai_advice
+1,2026-02-15,Lat Pulldown,Vertical Pull,Stall,No strength progression over 3 sessions.,Rectified,"Reduced load by 10% and prescribed 3-second eccentrics to break plateau."
+2,2026-03-08,Bench Press,Horizontal Push,Problem,Left front delt feels tweaky at the bottom,Active,"Lower the bar to mid-chest, keeping elbows at 45° and retracting shoulder blades. Reduced target to 80kg x 5."
+3,2026-03-10,Squats,Quad/Glute,Problem,decline in perfomance due to leg sourness from playing football,Active,"try to space out football and leg day session within the week . reduce the volume and intensity or skip session instead of pushing through sourness"
+4,2026-01-20,Deadlift,Posterior Chain,Problem,Lower back rounding during initial pull.,Rectified,"Deloaded to 100kg. Cue added to focus on core bracing and pulling slack out of the bar before liftoff."
+5,2026-02-28,Lateral Raises,Shoulder Isolation,Stall,Reps dropped from 15 to 10 at same weight.,Rectified,"Drop weight and perform more controlled reps , avoid shrugging .cue : try to push the weight to the side instead of trying to lift it  "
+6,2026-03-15,Overhead Press,Vertical Push,Problem,Right shoulder clicking during lockout.,Active,"Swapped to seated neutral-grip dumbbell press to reduce shoulder impingement risk."

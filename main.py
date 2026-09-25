@@ -3,13 +3,24 @@ import json
 from groq import Groq
 from engine import ProgressionEngine
 
-def get_active_issues(muscle_group, issues_path='issue_log.csv'):
+def get_issue_history(muscle_group, filepath='issue_log.csv'):
     try:
-        issues = pd.read_csv(issues_path)
-        active = issues[(issues['muscle_group'] == muscle_group) & (issues['status'] == 'Active')]
-        return active[['exercise', 'issue_type', 'description', 'date_flagged']].to_dict(orient='records')
+        issues = pd.read_csv(filepath)
     except FileNotFoundError:
-        return []
+        return {"active_issues": [], "past_rectified_issues": []}
+    
+    # Filter for the specific muscle group
+    mg_issues = issues[issues['muscle_group'] == muscle_group].fillna("")
+    
+    # Split into active and rectified
+    active = mg_issues[mg_issues['status'] == 'Active']
+    rectified = mg_issues[mg_issues['status'] == 'Rectified']
+    
+    # Convert to lists of dictionaries for the JSON payload
+    return {
+        "active_issues": active.to_dict(orient='records'),
+        "past_rectified_issues": rectified.to_dict(orient='records')
+    }
 
 def get_healthy_exercises(target_date, muscle_group, logs_path, flagged_exercises):
     logs = pd.read_csv(logs_path)
@@ -30,27 +41,37 @@ def call_ai_coach(payload, client):
     2. Provide fitness advice considering the user's current performance/strength level, any reported issues, and historical context.
     3. analyze the flagged exercises with data on other exercises of the same muscle group to diagonize the issue properly and solve it .
     4. before you suggest a new progression , check if the user is stalling or if they are just having a bad day and provide a solution accordingly .
-    5. If you suggest a new progression, provide the new target weight, reps, and RIR for the next session , like a professional coach would do. make sure the numbers are reasonable and not exxagerated , or too low . also provide cues for form and recovery if needed .
+    5. If you suggest a new progression, provide the new target weight, reps, and RIR for the next session , like a professional coach would do. make sure the numbers are reasonable for user's current strength level , the actual exercise(compound vs isolation) and not exxagerated , or too low . also provide cues for form and recovery if needed .
+    6. while diagonizing the issue , consider the user's past history of issues and how they were resolved or if they are still active to provide a more informed solution.
     Data: {json.dumps(payload, indent=2)}
     
     Respond STRICTLY with JSON matching this format:
-    {{
-        "analysis": "Brief biomechanical explanation of the issue.",
-        "adjustments": [
-            {{
+{{
+    "analysis": "Brief biomechanical explanation of the issue across the muscle group.",
+    "is_override": true,
+    "adjustments": [
+        {{
+            "exercise": "Exercise Name",
+            "new_target_weight_kg": 0.0,
+            "new_target_reps": 0,
+            "new_target_rir": 0,
+            "ai_instructions": "Brief cue or instruction.",
+            "issue_log_append": {{
+                "date_flagged": "YYYY-MM-DD",
                 "exercise": "Exercise Name",
-                "new_target_weight_kg": 0.0,
-                "new_target_reps": 0,
-                "new_target_rir": 0,
-                "ai_instructions": "Brief cue or instruction."
+                "muscle_group": "Target Muscle",
+                "issue_type": "Stall or Problem",
+                "description": "The original user note or stall description.",
+                "status": "Active",
+                "ai_advice": "1-sentence database summary of the diagnosis and prescription."
             }}
-        ]
-    }}
-    """
+        }}
+    ]
+}}"""
 
     try:
         response = client.chat.completions.create(
-            model="openai/gpt-oss-20b", 
+            model="openai/gpt-oss-120b", 
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
@@ -85,11 +106,16 @@ def run_pipeline(target_date, api_key):
             print(f"\nGathering context for muscle group: [{mg}]...")
             
             flagged_names = [f['exercise'] for f in flags]
+            
+            # Fetch the bifurcated history
+            history = get_issue_history(mg)
+            
             ai_payload = {
                 "muscle_group": mg,
                 "flagged_exercises": flags,
                 "healthy_exercises_today": get_healthy_exercises(target_date, mg, 'workout_logs.csv', flagged_names),
-                "historical_active_issues": get_active_issues(mg)
+                "active_issues": history["active_issues"],
+                "past_rectified_issues": history["past_rectified_issues"]
             }
             
             ai_prescription = call_ai_coach(ai_payload, client)
@@ -100,10 +126,19 @@ def run_pipeline(target_date, api_key):
                 for adj in ai_prescription['adjustments']:
                     print(f"  - {adj['exercise']} Target Updated: {adj['new_target_weight_kg']}kg x {adj['new_target_reps']} @ RIR {adj['new_target_rir']}")
                     print(f"  - Cue: {adj['ai_instructions']}")
-                    
                 print("\n📝 PROPOSED ISSUE LOG UPDATES:")
-                for f in flags:
-                    print(f"  - APPEND TO issue_log.csv: {target_date} | {f['exercise']} | {mg} | {f['status']} | {f['problem_note']} | Active")
+                for adj in ai_prescription['adjustments']:
+                    # 1. Look inside the specific adjustment for the 'issue_log_append' block
+                    log_append_data = adj.get('issue_log_append')
+                    
+                    # 2. Only print if the AI actually generated an issue log for this exercise
+                    if log_append_data:
+                        # Now we are looking in the right place!
+                        generated_advice = log_append_data.get('ai_advice', 'No advice recorded.')
+                        
+                        # We also pull the exercise name and problem note directly from what the AI formatted
+                        print(f"  - APPEND TO issue_log.csv: {target_date} | {adj['exercise']} | {mg} | {log_append_data.get('issue_type', 'Problem')} | {log_append_data.get('description', '')} | Active | \"{generated_advice}\"")
+                
 
 import os
 
