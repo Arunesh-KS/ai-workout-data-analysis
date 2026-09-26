@@ -1,38 +1,48 @@
+from typing import Literal, Union, List, Optional, Annotated
 from pydantic import BaseModel, Field
-from typing import Optional
 
 class IssueLogUpdate(BaseModel):
     date_flagged: str
     exercise: str
     muscle_group: str
     issue_type: str
-    description: str = Field(description="The original user note or stall description.")
-    status: str = Field(default="Active")
-    # ADD THIS LINE:
-    ai_advice: str = Field(description="A concise summary of the diagnosis, cues, and target adjustments prescribed today.")
+    description: str
+    status: str
+    ai_advice: str
 
-class AIWorkoutAnalysis(BaseModel):
-    
-    is_override: bool = Field(
-        description="Set to True ONLY IF the user is stalling, reports pain/injury, or requires a variation. Set to False if the notes are positive or no changes to the default progression are needed."
-    )
-    
-    # Override fields (Only used if is_override is True)
-    override_weight_kg: Optional[float] = Field(
-        default=None,
-        description="The new suggested weight in kg. Use this if recommending a deload or a different exercise variation."
-    )
-    override_reps: Optional[int] = Field(
-        default=None,
-        description="The new suggested rep count (e.g., around 12-15 for joint recovery or  around 5-8 for strength blocks . also give the starting rep )."
-    )
-    suggested_variation: Optional[str] = Field(
-        default=None,
-        description="A suggested alternative exercise if the current one causes pain or extreme stalling (e.g., 'Switch to Dumbbell Bench Press' if barbell hurts elbows)."
-    )
-    
-    # Always provided to give the user context
-    coach_feedback: str = Field(
-        description="Actionable advice addressing the specific notes or stalling. if weights , reps were adjusted , also provide the rep range , give cues for form ."
-    )
-    issue_log_append: Optional[IssueLogUpdate] = None
+class ExerciseAdjustment(BaseModel):
+    exercise: str
+    new_target_weight_kg: float
+    new_target_reps: int
+    new_target_rir: int
+    ai_instructions: str
+    issue_log_append: Optional[IssueLogUpdate]
+
+
+class ActionQueryDatabase(BaseModel):
+    """Triggered when the AI needs historical data for another exercise."""
+    action_type: Literal["QUERY_DATABASE"]
+    exercise_to_query: str = Field(description="The exact name of the exercise to look up.")
+    reasoning: str = Field(description="Internal thought process on why this data is needed.")
+
+class ActionAskUser(BaseModel):
+    """Triggered when the AI needs physical symptoms or lifestyle context from the user."""
+    action_type: Literal["ASK_USER"]
+    question: str = Field(description="The clarifying question to print to the terminal.")
+    reasoning: str = Field(description="Internal thought process explaining the current hypothesis.")
+
+class ActionFinalize(BaseModel):
+    """Triggered when confidence is high enough to write the final CSV updates."""
+    action_type: Literal["FINALIZE_DIAGNOSIS"]
+    analysis: str = Field(description="The final biomechanical/fatigue diagnosis.")
+    is_override: bool
+    adjustments: List[ExerciseAdjustment]
+
+# --- The Master Agent Schema ---
+
+# The discriminator tells Pydantic to look at the 'action_type' field first, 
+# then validate against the corresponding class.
+AgentResponse = Annotated[
+    Union[ActionQueryDatabase, ActionAskUser, ActionFinalize], 
+    Field(discriminator="action_type")
+]

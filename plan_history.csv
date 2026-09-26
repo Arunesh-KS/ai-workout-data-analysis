@@ -1,0 +1,14 @@
+plan_id,day_name,order,exercise,start_date,end_date
+plan_001,Push,1,Bench Press,2025-10-01,2026-02-15
+plan_001,Push,2,Bench Press,2025-10-01,2026-02-15
+plan_001,Push,3,Overhead Press,2025-10-01,2026-02-15
+plan_001,Push,4,Lateral Raises,2025-10-01,2026-02-15
+plan_001,Push,5,Lateral Raises,2025-10-01,2026-02-15
+plan_002,Upper_A,1,Bench Press,2026-02-16,
+plan_002,Upper_A,2,Overhead Press,2026-02-16,
+plan_002,Upper_A,3,Bench Press,2026-02-16,
+plan_002,Upper_A,4,Overhead Press,2026-02-16,
+plan_002,Upper_A,5,Lateral Raises,2026-02-16,
+plan_002,Upper_A,6,Tricep Extensions,2026-02-16,
+plan_002,Lower_A,1,Squats,2026-02-16,
+plan_002,Lower_A,2,Squats,2026-02-16,
