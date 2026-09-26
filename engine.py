@@ -3,7 +3,7 @@ import pandas as pd
 class ProgressionEngine:
     def __init__(self):
         self.logs_path = 'workout_logs.csv'
-        self.plan_path = 'workout_plan.csv'
+        self.plan_path = 'active_target.csv'
         self.issues_path = 'issue_log.csv'
 
     def calculate_e1rm(self, weight, reps, rir):

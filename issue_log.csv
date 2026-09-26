@@ -1,7 +1,10 @@
 id,date_flagged,exercise,muscle_group,issue_type,description,status,ai_advice
-1,2026-02-15,Lat Pulldown,Vertical Pull,Stall,No strength progression over 3 sessions.,Rectified,"Reduced load by 10% and prescribed 3-second eccentrics to break plateau."
-2,2026-03-08,Bench Press,Push,Problem,Left front delt feels tweaky at the bottom,Active,"Lower the bar to mid-chest, keeping elbows at 45° and retracting shoulder blades. Reduced target to 80kg x 5."
-3,2026-03-10,Squats,Quad/Glute,Problem,decline in perfomance due to leg sourness from playing football,Active,"try to space out football and leg day session within the week . reduce the volume and intensity or skip session instead of pushing through sourness"
-4,2026-01-20,Deadlift,Posterior Chain,Problem,Lower back rounding during initial pull.,Rectified,"Deloaded to 100kg. Cue added to focus on core bracing and pulling slack out of the bar before liftoff."
-5,2026-02-28,Lateral Raises,Push,Stall,Reps dropped from 15 to 10 at same weight.,Rectified,"Drop weight and perform more controlled reps , avoid shrugging .cue : try to push the weight to the side instead of trying to lift it  "
-6,2026-03-15,Overhead Press,Push,Problem,Right shoulder clicking during lockout.,Active,"Swapped to seated neutral-grip dumbbell press to reduce shoulder impingement risk."
+1,2026-01-18,barbell_bench_press,Push,Stall,"Performance has not progressed beyond 80kg despite repeated exposure. Latest session reached 8 and 7 reps.",Active,
+2,2026-01-18,dumbell_bench_press,Push,Decline,"Dropped from 30kg x 10,10 to 30kg x 9,9 with no problem recorded.",Active,
+3,2026-01-18,seated_overhead_dumbell_press,Push,Stall,"Performance remained at 22.5kg and declined from 8,8 to 8,7 reps.",Active,
+4,2026-01-18,Lateral_raises,Push,Problem,"Mild right shoulder pain appeared during later repetitions.",Active,
+5,2026-01-18,weighted_dips,Push,Problem,"Mild left shoulder discomfort reported at the bottom position.",Active,
+6,2026-01-20,weighted_pullups,Pull,Stall,"Performance repeated at +20kg for 7,6 reps across sessions without upward progression.",Active,
+7,2026-01-20,lat_pulldowns,Pull,Decline,"Dropped from 65kg x 10,10 to 65kg x 9,9 with no problem recorded.",Active,
+8,2026-01-27,squats,Legs,Sudden Decline,"Performance dropped from 100kg x 6,6 to 100kg x 3 on the latest session with no problem recorded.",Active,
+9,2026-01-27,romanian_deadlift,Legs,Decline,"Dropped from 90kg x 8,8 to 90kg x 6 on the latest session.",Active,

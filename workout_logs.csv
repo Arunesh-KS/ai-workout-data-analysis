@@ -1,31 +1,51 @@
-id,date,exercise,muscle_group,set number,reps,weight,rir,notes,problems
-1,2026-03-01,Bench Press,Horizontal Push,1,8,80.0,2,Felt strong,
-2,2026-03-01,Bench Press,Horizontal Push,2,8,80.0,1,,
-3,2026-03-01,Bench Press,Horizontal Push,3,7,80.0,0,,
-4,2026-03-01,Chest Flyes,Horizontal Push,1,12,15.0,2,Great stretch,
-5,2026-03-01,Chest Flyes,Horizontal Push,2,12,15.0,2,,
-6,2026-03-01,Chest Flyes,Horizontal Push,3,12,15.0,1,,
-7,2026-03-01,Lat Pulldown,Vertical Pull,1,10,65.0,2,,
-8,2026-03-01,Lat Pulldown,Vertical Pull,2,10,65.0,1,,
-9,2026-03-01,Lat Pulldown,Vertical Pull,3,9,65.0,0,Solid contraction,
-10,2026-03-03,Squats,Quad/Glute,1,5,120.0,1,Smooth depth,
-11,2026-03-03,Squats,Quad/Glute,2,5,120.0,1,,
-12,2026-03-03,Squats,Quad/Glute,3,5,120.0,0,,
-13,2026-03-03,Lateral Raises,Shoulder Isolation,1,15,12.5,2,,
-14,2026-03-03,Lateral Raises,Shoulder Isolation,2,15,12.5,1,,
-15,2026-03-03,Lateral Raises,Shoulder Isolation,3,14,12.5,0,,
-16,2026-03-08,Bench Press,Push,1,8,82.5,1,,
-17,2026-03-08,Bench Press,Push,2,7,82.5,0,,
-18,2026-03-08,Bench Press,Push,3,6,82.5,0,,Left front delt feels tweaky at the bottom
-19,2026-03-08,Chest Flyes,Push,1,12,17.5,2,,
-20,2026-03-08,Chest Flyes,Push,2,11,17.5,1,,
-21,2026-03-08,Chest Flyes,Push,3,10,17.5,0,Good pump no pain,
-22,2026-03-08,Lat Pulldown,Vertical Pull,1,10,67.5,1,,
-23,2026-03-08,Lat Pulldown,Vertical Pull,2,9,67.5,0,,
-24,2026-03-08,Lat Pulldown,Vertical Pull,3,9,67.5,0,,
-25,2026-03-10,Squats,Quad/Glute,1,2,122.5,0,,
-26,2026-03-10,Squats,Quad/Glute,2,2,122.5,0,,
-27,2026-03-10,Squats,Quad/Glute,3,2,122.5,0,,
-28,2026-03-10,Lateral Raises,Push,1,10,12.5,1,,
-29,2026-03-10,Lateral Raises,Push,2,10,12.5,1,,
-30,2026-03-10,Lateral Raises,Push,3,10,12.5,0,,
+id,date,exercise,muscle_group,set number,reps,weight,rir,problems,plan_id,day_name
+1,2026-01-08,barbell_bench_press,Push,1,8,80.0,2,,plan_001,Push
+2,2026-01-08,barbell_bench_press,Push,2,8,80.0,1,,plan_001,Push
+3,2026-01-08,chest_flys,Push,1,12,17.5,2,,plan_001,Push
+4,2026-01-08,chest_flys,Push,2,11,17.5,1,,plan_001,Push
+5,2026-01-08,dumbell_bench_press,Push,1,10,30.0,2,,plan_001,Push
+6,2026-01-08,dumbell_bench_press,Push,2,10,30.0,1,,plan_001,Push
+7,2026-01-08,seated_overhead_dumbell_press,Push,1,8,22.5,2,,plan_001,Push
+8,2026-01-08,seated_overhead_dumbell_press,Push,2,8,22.5,1,,plan_001,Push
+9,2026-01-08,Lateral_raises,Push,1,15,10.0,1,,plan_001,Push
+10,2026-01-08,weighted_dips,Push,1,8,20.0,2,,plan_001,Push
+11,2026-01-10,weighted_pullups,Pull,1,7,20.0,2,,plan_001,Pull
+12,2026-01-10,weighted_pullups,Pull,2,6,20.0,1,,plan_001,Pull
+13,2026-01-10,lat_pulldowns,Pull,1,10,65.0,2,,plan_001,Pull
+14,2026-01-10,lat_pulldowns,Pull,2,10,65.0,1,,plan_001,Pull
+15,2026-01-10,standing_barbell_wide_rows,Pull,1,10,55.0,2,,plan_001,Pull
+16,2026-01-10,standing_barbell_wide_rows,Pull,2,10,55.0,1,,plan_001,Pull
+17,2026-01-10,chest_supported_rows,Pull,1,12,45.0,2,,plan_001,Pull
+18,2026-01-10,standing_bicep_curls,Arms,1,10,15.0,1,,plan_001,Pull
+19,2026-01-12,squats,Legs,1,6,100.0,2,,plan_001,Legs
+20,2026-01-12,squats,Legs,2,6,100.0,1,,plan_001,Legs
+21,2026-01-12,romanian_deadlift,Legs,1,8,90.0,2,,plan_001,Legs
+22,2026-01-12,romanian_deadlift,Legs,2,8,90.0,1,"Hamstrings felt unusually tight",plan_001,Legs
+23,2026-01-12,leg_curls,Legs,1,12,40.0,2,,plan_001,Legs
+24,2026-01-12,leg_curls,Legs,2,11,40.0,1,,plan_001,Legs
+25,2026-01-12,bulgarian_split_squats,Legs,1,10,20.0,2,,plan_001,Legs
+26,2026-01-12,bulgarian_split_squats,Legs,2,9,20.0,1,,plan_001,Legs
+27,2026-01-18,barbell_bench_press,Push,1,8,80.0,2,,plan_001,Push
+28,2026-01-18,barbell_bench_press,Push,2,7,80.0,0,,plan_001,Push
+29,2026-01-18,chest_flys,Push,1,11,17.5,1,,plan_001,Push
+30,2026-01-18,chest_flys,Push,2,10,17.5,0,,plan_001,Push
+31,2026-01-18,dumbell_bench_press,Push,1,9,30.0,1,,plan_001,Push
+32,2026-01-18,dumbell_bench_press,Push,2,9,30.0,0,,plan_001,Push
+33,2026-01-18,seated_overhead_dumbell_press,Push,1,8,22.5,1,,plan_001,Push
+34,2026-01-18,seated_overhead_dumbell_press,Push,2,7,22.5,0,,plan_001,Push
+35,2026-01-18,Lateral_raises,Push,1,14,10.0,1,"Mild right shoulder pain during later reps",plan_001,Push
+36,2026-01-18,weighted_dips,Push,1,7,20.0,0,"Mild left shoulder discomfort at the bottom position",plan_001,Push
+37,2026-01-20,weighted_pullups,Pull,1,7,20.0,2,,plan_001,Pull
+38,2026-01-20,weighted_pullups,Pull,2,6,20.0,1,,plan_001,Pull
+39,2026-01-20,lat_pulldowns,Pull,1,9,65.0,1,,plan_001,Pull
+40,2026-01-20,lat_pulldowns,Pull,2,9,65.0,0,,plan_001,Pull
+41,2026-01-20,standing_barbell_wide_rows,Pull,1,10,55.0,1,,plan_001,Pull
+42,2026-01-20,chest_supported_rows,Pull,1,11,45.0,1,,plan_001,Pull
+43,2026-01-20,standing_bicep_curls,Arms,1,10,15.0,1,,plan_001,Pull
+44,2026-01-25,barbell_bench_press,Push,1,8,80.0,1,,plan_002,Upper_A
+45,2026-01-25,weighted_pullups,Pull,1,6,20.0,1,,plan_002,Upper_A
+46,2026-01-25,chest_supported_rows,Pull,1,9,45.0,1,,plan_002,Upper_A
+47,2026-01-25,tricep_pushdown,Arms,1,12,25.0,1,,plan_002,Upper_A
+48,2026-01-27,squats,Legs,1,3,100.0,0,,plan_002,Lower_A
+49,2026-01-27,romanian_deadlift,Legs,1,6,90.0,0,,plan_002,Lower_A
+50,2026-01-27,leg_curls,Legs,1,10,40.0,0,,plan_002,Lower_A

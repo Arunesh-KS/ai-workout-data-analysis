@@ -37,12 +37,20 @@ class ActionFinalize(BaseModel):
     analysis: str = Field(description="The final biomechanical/fatigue diagnosis.")
     is_override: bool
     adjustments: List[ExerciseAdjustment]
+class ActionQueryPlan(BaseModel):
+    """Triggered when the AI needs context about the user's overall routine, current plan structure, or past plans."""
+    action_type: Literal["QUERY_PLAN"]
+    query_type: Literal["current", "previous"] = Field(description="Whether to fetch the 'current' active plan or the most recent 'previous' plan.")
+    reasoning: str = Field(description="Internal thought process on why plan data is needed.")
+
+
+
 
 # --- The Master Agent Schema ---
 
 # The discriminator tells Pydantic to look at the 'action_type' field first, 
 # then validate against the corresponding class.
 AgentResponse = Annotated[
-    Union[ActionQueryDatabase, ActionAskUser, ActionFinalize], 
+    Union[ActionQueryDatabase, ActionAskUser, ActionQueryPlan, ActionFinalize], 
     Field(discriminator="action_type")
 ]
