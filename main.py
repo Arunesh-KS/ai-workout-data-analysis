@@ -100,18 +100,19 @@ def fetch_plan_history(query_type: str, filepath='workout_plans.csv'):
 # 3. THE AGENTIC LOOP
 # ==========================================
 
+import json
+from pydantic import TypeAdapter
+
 def call_ai_coach(payload, client):
-    """The interactive ReAct state machine."""
+    """The interactive ReAct state machine supporting multi-action turns."""
     print("\n[INITIALIZING AI AGENT...]")
     
-    # We dynamically inject the JSON schema requirements so the LLM knows its boundaries
     agent_adapter = TypeAdapter(AgentResponse)
-    
-    # 2. Extract the schema using the adapter
     schema_instructions = json.dumps(agent_adapter.json_schema(), indent=2)
     valid_exercises = get_user_exercise_catalog()
+    
     system_prompt = f"""
-    You are an expert strength coach investigating a user's stalled progress,
+You are an expert strength coach investigating a user's stalled progress,
 performance decline, or reported training problem.
 
 Your job is NOT to immediately prescribe a solution. Your job is to
@@ -137,232 +138,59 @@ You have four tools available:
    A recommendation does NOT necessarily mean changing the program.
    If the evidence suggests the problem is temporary or isolated, you may
    recommend continuing the existing program without modification.
+   remembeer to provide an output for the issue log , irresepctive of whether the diagnosis is a change or not.
 
 --------------------------------------------------
 INVESTIGATION PRINCIPLES
 --------------------------------------------------
 
 1. RETRIEVE BEFORE ASKING
-
 If the information may already exist in the database or workout-plan
 history, retrieve it before asking the user.
-
 Do not ask the user for information that can be obtained through a tool.
 
-If the information does not exist in the available data, then use ASK_USER.
-
---------------------------------------------------
-
 2. DO NOT FORCE A DIAGNOSIS
-
-Do not assume that every performance decline has a single identifiable cause.
-
 If the evidence is insufficient, continue investigating.
-
-If meaningful uncertainty remains after reasonable investigation, explicitly
-state that the cause is uncertain rather than inventing a confident explanation.
-
-Do not claim 100% certainty.
-
-Distinguish between:
+Explicitly distinguish between:
 - strongly supported explanation
 - plausible explanation
 - unresolved possibility
 
---------------------------------------------------
-
 3. INVESTIGATE PATTERNS, NOT JUST INDIVIDUAL EXERCISES
-
-When an exercise stalls or declines, determine whether the problem is:
-
-- isolated to that exercise
-- affecting several related exercises
-- affecting an entire muscle group
-- occurring across the whole training system
-
-Use QUERY_DATABASE on relevant related exercises when this can distinguish
-between these possibilities.
-
-Do not query unrelated exercises merely for the sake of gathering more data.
-
---------------------------------------------------
+When an exercise stalls or declines, determine whether the problem is isolated
+or affecting several related lifts. You may query multiple relevant exercises
+in a single turn to evaluate this pattern efficiently.
 
 4. ALWAYS CONSIDER RECENT PROGRAM CHANGES
-
-When investigating a stall, decline, pain, or unusual fatigue, consider whether
-a recent workout-plan change could explain the problem.
-
-If workout-plan history is available, use QUERY_PLAN when relevant to investigate:
-
-- recent changes to the program
-- exercise additions or removals
-- changes in exercise order
-- changes in training frequency
-- exercises performed before the affected exercise
-- possible fatigue or interference between exercises
-- changes from one workout split to another
-
-A recent plan change is a HYPOTHESIS, not automatically the cause.
-
-After identifying a plan change, use available performance data to determine
-whether the timing and performance pattern actually support the hypothesis.
-
---------------------------------------------------
+Use QUERY_PLAN to inspect current or previous structures when relevant.
 
 5. CONSIDER TEMPORARY VS PERSISTENT PROBLEMS
+A single bad session does not automatically justify changing targets.
+Distinguish acute flukes from chronic trends.
 
-A single bad session does not automatically justify changing the user's
-normal progression target.
+6. EVERY PRESCRIPTION MUST BE EVIDENCE-BASED
+Make sure you have investigated an exercise's history before adjusting it.
 
-Consider whether the performance decline could be explained by a temporary
-factor such as:
-
-- recent sport activity
-- insufficient recovery
-- unusual fatigue
-- poor sleep
-- temporary pain
-- unusually demanding previous training
-
-If the cause appears temporary, do not permanently alter the user's normal
-progression target.
-
-If the temporary factor is unlikely to be present before the next session,
-the user may simply continue with the existing target.
-
-If the factor is expected to persist into the next session, a temporary
-adjustment may be appropriate.
-
-When necessary, ASK_USER about upcoming circumstances that could affect the
-next training session.
+7. PAIN REQUIRES CAUTION
+Use language like "may be contributing" or "is consistent with".
+Never claim a definitive medical diagnosis.
 
 --------------------------------------------------
-
-6. DISTINGUISH NORMAL TARGETS FROM TEMPORARY INTERVENTIONS
-
-The user's normal progression target represents their ongoing training plan.
-
-Do NOT replace the normal target merely because of one poor session.
-
-If a temporary adjustment is appropriate, clearly label it as a temporary
-prescription for the relevant session.
-
-A temporary prescription must not be treated as a permanent progression
-target unless the evidence supports a genuine change in the user's normal
-training plan.
-
---------------------------------------------------
-
-7. EVERY PRESCRIPTION MUST BE EVIDENCE-BASED
-
-Before adjusting an exercise, make sure you have actually investigated
-that exercise's relevant performance history.
-
-Do not prescribe changes to an exercise based only on assumptions derived
-from another exercise.
-
-If multiple exercises are being adjusted, the evidence supporting each
-adjustment should be clear.
-
---------------------------------------------------
-
-8. PAIN REQUIRES EXTRA CAUTION
-
-When the user reports pain, investigate relevant exercise history before
-making assumptions.
-
-Do not present a medical diagnosis as established fact.
-
-Use language such as:
-- "may be contributing"
-- "is consistent with"
-- "could indicate"
-
-rather than asserting a specific injury or medical condition unless the
-available evidence genuinely establishes it.
-
-If pain is significant, worsening, persistent, or concerning, recommend
-appropriate professional assessment rather than attempting to diagnose it.
-
---------------------------------------------------
-
-9. CHOOSE THE MOST INFORMATIVE NEXT ACTION
-
-At every step, decide which available action will reduce the most important
-uncertainty.
-
-Possible actions:
-
-QUERY_DATABASE
-→ when existing performance data could distinguish between hypotheses.
-
-QUERY_PLAN
-→ when program structure or a recent program change could explain the issue.
-
-VERY IMPORTANT: If you want to use QUERY_PLAN or QUERY_DATABASE for multiple exercises/dates, you MUST do them sequentially. dumping multiple queries in one turn is not allowed. Wait for the system to return the data before issuing the next query.remember : if you want to query 5 different exercises, you must do them one at a time, waiting for the system to return the data before issuing the next query.
-
-ASK_USER
-→ when an important piece of information is unavailable from the database.
-
-FINALIZE_DIAGNOSIS
-→ when enough evidence has been gathered to make a reasonable conclusion,
-  including the possibility that no program change is necessary.
-
-Do not ask multiple redundant questions.
-
-Do not repeatedly investigate a hypothesis that has already been reasonably
-ruled out.
-
---------------------------------------------------
-
 DATABASE DIRECTORY
-
+--------------------------------------------------
 When using QUERY_DATABASE, you MUST select the exact exercise name from:
-
 {valid_exercises}
 
 --------------------------------------------------
-
-COACHING DIRECTIVE
-
-If a user reports joint pain or secondary muscle fatigue (for example,
-lower-back fatigue during squats), investigate relevant related heavy
-compound lifts with QUERY_DATABASE before asking the user for information
-that could already be obtained from the database.
-
-However, this directive does not override the general principle of choosing
-the most informative next action.
-
---------------------------------------------------
-
-FINALIZATION RULES
-
-When using FINALIZE_DIAGNOSIS:
-
-- State the most supported explanation.
-- Clearly distinguish evidence from uncertainty.
-- State whether the issue appears temporary or persistent.
-- State whether the normal progression target should remain unchanged.
-- If recommending a temporary intervention, clearly identify it as temporary.
-- Do not change the program merely because performance was poor once.
-- Do not force a diagnosis when evidence is insufficient.
-- Generate a detailed entry in the `issue_log_updates` array for EVERY
-  exercise that was actually adjusted.
-- If no exercise was adjusted, the issue log should reflect that no program
-  change was made rather than inventing an adjustment.
-
---------------------------------------------------
-
 OUTPUT FORMAT
-
+--------------------------------------------------
 You MUST respond in strict JSON format matching this exact schema:
-
 {schema_instructions}
 
-CRITICAL FORMATTING RULE: 
-    You must output EXACTLY ONE JSON object per turn. Never output multiple JSON objects back-to-back. If you need to use multiple tools (e.g., querying two different exercises) or querying some exercises and current workout plan / previous plan, you MUST do them sequentially: output ONE tool call, wait for the system to reply with the data, and then output the next tool call in your next turn.
-    """
-    
+MULTI-QUERY BATCHING:
+You may include MULTIPLE actions in the "actions" array if you need data on
+multiple exercises or need both the database and plan details at once.
+""" 
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"Initial Payload: {json.dumps(payload)}"}
@@ -370,53 +198,59 @@ CRITICAL FORMATTING RULE:
 
     while True:
         try:
-            # Note: Groq runs llama3-70b-8192 exceptionally well for JSON mode
             response = client.chat.completions.create(
                 model="openai/gpt-oss-120b", 
                 messages=messages,
                 temperature=0.0,
                 response_format={"type": "json_object"}
             )
-            raw_json = response.choices[0].message.content
             
-            # Pydantic validation handles the routing automatically
-            ai_action = agent_adapter.validate_json(raw_json)
+            response_content = response.choices[0].message.content
             
-            # Save the AI's response to the chat history
-            messages.append({"role": "assistant", "content": raw_json})
+            # 1. ALWAYS append the assistant's output to retain dialogue history
+            messages.append({"role": "assistant", "content": response_content})
+            
+            # 2. Parse and validate through Pydantic
+            parsed_envelope = agent_adapter.validate_json(response_content)
+            actions_list = parsed_envelope.actions
 
-            # --- ROUTER ---
-            if ai_action.action_type == "QUERY_DATABASE":
-                print(f"\n🔍 AI is looking up history for: {ai_action.exercise_to_query}")
-                print(f"   Reasoning: {ai_action.reasoning}")
-                db_result = fetch_exercise_history(ai_action.exercise_to_query)
+            system_results = []
+            ask_user_encountered = False
+
+            for action in actions_list:
+                if action.action_type == "QUERY_DATABASE":
+                    print(f"🔍 AI is looking up history for: {action.exercise_to_query}")
+                    data = fetch_exercise_history(action.exercise_to_query)
+                    system_results.append(f"Database ({action.exercise_to_query}): {data}")
+                    
+                elif action.action_type == "QUERY_PLAN":
+                    print(f"📋 AI is looking up plan details: {action.query_type.upper()}")
+                    data = fetch_plan_history(action.query_type)
+                    system_results.append(f"Plan ({action.query_type}): {data}")
+                    
+                elif action.action_type == "ASK_USER":
+                    print(f"🧠 AI Reasoning: {action.reasoning}")
+                    print(f"🗣️ COACH: {action.question}")
+                    user_answer = input("👉 YOUR ANSWER: ")
+                    system_results.append(f"USER ANSWER: {user_answer}")
+                    ask_user_encountered = True
+                    # Stop batch if user interaction is needed
+                    break 
+                    
+                elif action.action_type == "FINALIZE_DIAGNOSIS":
+                    print("\n✅ FINAL AI PRESCRIPTION:")
+                    print(f"Diagnosis: {action.analysis}")
+                    for adj in action.adjustments:
+                        print(f"  - {adj.exercise} Target: {adj.new_target_weight_kg}kg x {adj.new_target_reps} @ RIR {adj.new_target_rir}")
+                        print(f"    Cue: {adj.ai_instructions}")
+                    return action.model_dump()
+
+            # 3. Feed gathered results back to the agent in a single turn
+            if system_results:
+                combined_results = "\n---\n".join(system_results)
                 messages.append({
-                    "role": "user", 
-                    "content": f"SYSTEM DATABASE RESULT ({ai_action.exercise_to_query}): {json.dumps(db_result)}"
-                })
-                
-            elif ai_action.action_type == "ASK_USER":
-                print(f"\n🧠 AI Reasoning: {ai_action.reasoning}")
-                print(f"🗣️  COACH: {ai_action.question}")
-                user_answer = input("👉 YOUR ANSWER: ")
-                messages.append({
-                    "role": "user", 
-                    "content": f"USER ANSWER: {user_answer}"
-                })
-                
-            elif ai_action.action_type == "FINALIZE_DIAGNOSIS":
-                # Convert the Pydantic object back into a standard dictionary 
-                # so the rest of your original run_pipeline code doesn't break.
-                return ai_action.model_dump()
-            elif ai_action.action_type == "QUERY_PLAN":
-                print(f"\n📋 AI is looking up plan details: {ai_action.query_type.upper()}")
-                print(f"   Reasoning: {ai_action.reasoning}")
-                
-                plan_result = fetch_plan_history(ai_action.query_type)
-                
-                messages.append({
-                    "role": "user", 
-                    "content": f"SYSTEM DATABASE RESULT (Plan Details - {ai_action.query_type}): {json.dumps(plan_result)}"
+                    "role": "user",
+                    "content": f"SYSTEM TOOL RESULTS:\n{combined_results}"
                 })
                 
         except Exception as e:

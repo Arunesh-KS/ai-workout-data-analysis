@@ -50,7 +50,15 @@ class ActionQueryPlan(BaseModel):
 
 # The discriminator tells Pydantic to look at the 'action_type' field first, 
 # then validate against the corresponding class.
-AgentResponse = Annotated[
+# --- The Master Agent Schema ---
+
+# 1. Rename your existing Union to 'AgentAction'
+AgentAction = Annotated[
     Union[ActionQueryDatabase, ActionAskUser, ActionQueryPlan, ActionFinalize], 
     Field(discriminator="action_type")
 ]
+
+# 2. Create a new root BaseModel that holds a LIST of these actions
+class AgentResponse(BaseModel):
+    """The root response object from the AI, containing one or more actions."""
+    actions: List[AgentAction] = Field(description="A list of actions to execute this turn.")
