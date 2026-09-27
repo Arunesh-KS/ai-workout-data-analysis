@@ -16,7 +16,7 @@ class ExerciseAdjustment(BaseModel):
     new_target_reps: int
     new_target_rir: int
     ai_instructions: str
-    issue_log_append: Optional[IssueLogUpdate]
+   
 
 
 class ActionQueryDatabase(BaseModel):
@@ -36,7 +36,11 @@ class ActionFinalize(BaseModel):
     action_type: Literal["FINALIZE_DIAGNOSIS"]
     analysis: str = Field(description="The final biomechanical/fatigue diagnosis.")
     is_override: bool
-    adjustments: List[ExerciseAdjustment]
+    adjustments: List[ExerciseAdjustment] = Field(
+        default=[], 
+        description="List of target changes. Leave empty or omit if no changes are needed."
+    )
+    issue_log_updates: List[IssueLogUpdate] = Field(description="Always log the conclusion of the investigation here, even if adjustments is empty.")
 class ActionQueryPlan(BaseModel):
     """Triggered when the AI needs context about the user's overall routine, current plan structure, or past plans."""
     action_type: Literal["QUERY_PLAN"]

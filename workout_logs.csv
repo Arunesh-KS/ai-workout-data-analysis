@@ -43,8 +43,8 @@ id,date,exercise,muscle_group,set number,reps,weight,rir,problems,plan_id,day_na
 42,2026-01-20,chest_supported_rows,Pull,1,11,45.0,1,,plan_001,Pull
 43,2026-01-20,standing_bicep_curls,Arms,1,10,15.0,1,,plan_001,Pull
 44,2026-01-25,barbell_bench_press,Push,1,8,80.0,1,,plan_002,Upper_A
-45,2026-01-25,weighted_pullups,Pull,1,6,20.0,1,,plan_002,Upper_A
-46,2026-01-25,chest_supported_rows,Pull,1,9,45.0,1,,plan_002,Upper_A
+45,2026-01-25,weighted_pullups,Pull,1,8,20.0,1,,plan_002,Upper_A
+46,2026-01-25,chest_supported_rows,Pull,1,11,45.0,1,,plan_002,Upper_A
 47,2026-01-25,tricep_pushdown,Arms,1,12,25.0,1,,plan_002,Upper_A
 48,2026-01-27,squats,Legs,1,3,100.0,0,,plan_002,Lower_A
 49,2026-01-27,romanian_deadlift,Legs,1,6,90.0,0,,plan_002,Lower_A

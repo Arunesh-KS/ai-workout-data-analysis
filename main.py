@@ -95,6 +95,25 @@ def fetch_plan_history(query_type: str, filepath='workout_plans.csv'):
             }
     except Exception as e:
         return f"Database Error: {e}"
+import csv
+
+def fetch_session_context(target_date: str) -> dict:
+    """Retrieves the global pre-flight context for a specific workout date."""
+    try:
+        with open('session_history.csv', mode='r') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                if row['date'] == target_date:
+                    return row
+    except FileNotFoundError:
+        print("⚠️ session_history.csv not found.")
+    
+    # Return a default 'normal' state if the date isn't found
+    return {
+        "sleep": "unknown", "fatigue": "unknown", "physical_activity": "unknown",
+        "nutrition": "unknown", "stress": "unknown", "soreness_pain": "unknown", 
+        "other_notes": "No data recorded for this session."
+    }
 
 # ==========================================
 # 3. THE AGENTIC LOOP
@@ -147,7 +166,14 @@ INVESTIGATION PRINCIPLES
 1. RETRIEVE BEFORE ASKING
 If the information may already exist in the database or workout-plan
 history, retrieve it before asking the user.
-Do not ask the user for information that can be obtained through a tool.
+
+The user's baseline lifestyle factors for this specific workout are ALREADY 
+provided in the initial payload under `global_session_context`.
+- You MUST read this context first. 
+- Do NOT use the ASK_USER tool to ask about sleep, nutrition, general fatigue, 
+  overall stress, or general soreness. That data is already in front of you.
+- ONLY use the ASK_USER tool if you need highly specific mechanical details 
+  (e.g., "Where exactly in the elbow does it hurt during the pushdown?"). or if you need to clarify a specific recent event that may have affected training. or if you need more info regarding the user's lifestyle context that is not already provided in the initial payload.
 
 2. DO NOT FORCE A DIAGNOSIS
 If the evidence is insufficient, continue investigating.
@@ -199,7 +225,7 @@ multiple exercises or need both the database and plan details at once.
     while True:
         try:
             response = client.chat.completions.create(
-                model="openai/gpt-oss-120b", 
+                model="openai/gpt-oss-20b", 
                 messages=messages,
                 temperature=0.0,
                 response_format={"type": "json_object"}
@@ -238,11 +264,11 @@ multiple exercises or need both the database and plan details at once.
                     break 
                     
                 elif action.action_type == "FINALIZE_DIAGNOSIS":
-                    print("\n✅ FINAL AI PRESCRIPTION:")
-                    print(f"Diagnosis: {action.analysis}")
-                    for adj in action.adjustments:
-                        print(f"  - {adj.exercise} Target: {adj.new_target_weight_kg}kg x {adj.new_target_reps} @ RIR {adj.new_target_rir}")
-                        print(f"    Cue: {adj.ai_instructions}")
+                    # print("\n✅ FINAL AI PRESCRIPTION:")
+                    # print(f"Diagnosis: {action.analysis}")
+                    # for adj in action.adjustments:
+                    #     print(f"  - {adj.exercise} Target: {adj.new_target_weight_kg}kg x {adj.new_target_reps} @ RIR {adj.new_target_rir}")
+                    #     print(f"    Cue: {adj.ai_instructions}")
                     return action.model_dump()
 
             # 3. Feed gathered results back to the agent in a single turn
@@ -282,7 +308,7 @@ def run_pipeline(target_date, api_key):
             if mg not in grouped_issues:
                 grouped_issues[mg] = []
             grouped_issues[mg].append(item)
-            
+        daily_context = fetch_session_context(target_date) 
         for mg, flags in grouped_issues.items():
             print(f"\nGathering context for muscle group: [{mg}]...")
             flagged_names = [f['exercise'] for f in flags]
@@ -291,6 +317,7 @@ def run_pipeline(target_date, api_key):
             ai_payload = {
                 "muscle_group": mg,
                 "flagged_exercises": flags,
+                "global_session_context": daily_context,
                 "healthy_exercises_today": get_healthy_exercises(target_date, mg, 'workout_logs.csv', flagged_names),
                 "active_issues": history["active_issues"],
                 "past_rectified_issues": history["past_rectified_issues"]
