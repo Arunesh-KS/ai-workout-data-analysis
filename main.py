@@ -74,14 +74,20 @@ def get_healthy_sets(target_date, muscle_group, logs_path, flagged_queue_items):
             
     return healthy_sets
 
-def fetch_exercise_history(exercise_name: str, filepath='workout_logs.csv', limit=3):
-    """New helper for the AI to query historical performance of any exercise."""
+def fetch_exercise_history(exercise_name: str, filepath='workout_logs.csv', session_limit=3):
+    """Fetches all set logs for an exercise across the last N distinct workout sessions."""
     try:
         logs = pd.read_csv(filepath)
-        ex_logs = logs[logs['exercise'] == exercise_name].tail(limit)
+        ex_logs = logs[logs['exercise'] == exercise_name]
         if ex_logs.empty:
             return f"No recent data found for {exercise_name}."
-        return ex_logs.to_dict(orient='records')
+            
+        # Get unique dates sorted chronologically, then take the last N sessions
+        unique_dates = sorted(ex_logs['date'].dropna().unique())
+        last_dates = unique_dates[-session_limit:]
+        
+        recent_logs = ex_logs[ex_logs['date'].isin(last_dates)]
+        return recent_logs.to_dict(orient='records')
     except Exception as e:
         return f"Database Error: {e}"
 
@@ -155,7 +161,7 @@ def fetch_session_context(target_date: str) -> dict:
 # 3. THE AGENTIC LOOP (MESSAGE APPEND MODE)
 # ==========================================
 
-def call_ai_coach(payload, client):
+def call_ai_coach(initial_user_message,ai_payload, client):
     """The interactive ReAct state machine using history-rich message appending."""
     print("\n[INITIALIZING AI AGENT (MESSAGE APPEND)...]")
     
@@ -176,10 +182,9 @@ intervention is justified.
 --------------------------------------------------
 AVAILABLE COMMANDS
 --------------------------------------------------
-1. "QUERY_DATABASE": Look up recent performance history for a specific exercise.
+1. "QUERY_DATABASE": Look up recent performance history for a specific exercise. The history for flagged exercises and the current workout plan are ALREADY provided below under pre_fetched_exercise_history and pre_fetched_current_plan. Do NOT use QUERY_DATABASE or QUERY_PLAN for these exercises , so you can use this command only if you need to look up additional exercises that are relevant to the investigation.
 2. "ASK_USER": Ask the user for highly specific information.
-3. "QUERY_PLAN": Look up the user's "current" or "previous" workout plan.
-
+3. "QUERY_PLAN": Look up the user's "previous" workout plan , when relevant to the investigation . current plan is already provided in the initial payload, so you can use this command only if you need to look up the previous plan for context.
 4. "FINALIZE_DIAGNOSIS": Finish the investigation and prescribe target adjustments or maintain current targets.
 --------------------------------------------------
 INVESTIGATION PRINCIPLES
@@ -231,6 +236,8 @@ DATABASE DIRECTORY
 When using QUERY_DATABASE, you MUST select the exact exercise name from:
 {valid_exercises}
 
+and more importantly , you must check the pre_fetched_exercise_history in the initial payload first before using QUERY_DATABASE for any of these exercises. if the exercise is already in pre_fetched_exercise_history, you must use that data instead of querying the database again.
+
 --------------------------------------------------
 OUTPUT FORMAT
 --------------------------------------------------
@@ -241,11 +248,14 @@ MULTI-QUERY BATCHING:
 You may include MULTIPLE actions in the "actions" array if you need data on
 multiple exercises or need both the database and plan details at once.
 """
+    
 
+            # Initialize messages array with this XML string
     messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Initial Payload: {json.dumps(payload, cls=CustomJSONEncoder)}"}
-    ]
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": initial_user_message}
+            ]
+   
     
     total_tokens = 0
     total_input_tokens = 0
@@ -257,9 +267,9 @@ multiple exercises or need both the database and plan details at once.
             time.sleep(2) # Throttle to respect rate limits
             
             response = client.chat.completions.create(
-                model="openai/gpt-oss-120b", 
+                model="openai/gpt-oss-20b", 
                 messages=messages,
-                temperature=0.0,
+                temperature=0.5,
                 response_format={"type": "json_object"}
             )
             
@@ -343,23 +353,79 @@ def run_pipeline(target_date, api_key):
             grouped_issues[mg].append(item)
             
         daily_context = fetch_session_context(target_date) 
-        
         for mg, flags in grouped_issues.items():
             print(f"\nGathering context for muscle group: [{mg}]...")
             
             history = get_issue_history(mg)
             
+            # Pre-fetch history for every flagged exercise
+            pre_fetched_histories = {}
+            flagged_exercise_names = []
+            for flag in flags:
+                ex_name = flag['exercise']
+                #print(f"Pre-fetching history for flagged exercise: {ex_name}")
+                if ex_name not in flagged_exercise_names:
+                    flagged_exercise_names.append(ex_name)
+                    pre_fetched_histories[ex_name] = fetch_exercise_history(ex_name, session_limit=3)
+
+            # Pre-fetch the current workout plan
+            current_plan_data = fetch_plan_history("current")
+
             ai_payload = {
                 "muscle_group": mg,
                 "flagged_sets": flags, 
                 "healthy_sets_today": get_healthy_sets(target_date, mg, 'workout_logs.csv', flags),
                 "pending_fast_path_updates": fast_path_updates,
                 "global_session_context": daily_context,
+                
+                # Pre-fetched data injected directly into Turn 1!
+                "pre_fetched_current_plan": current_plan_data,
+                "pre_fetched_exercise_history": pre_fetched_histories,
+                
                 "active_issues": history["active_issues"],
                 "past_rectified_issues": history["past_rectified_issues"]
             }
+            # Create the XML-formatted initial message
+            initial_user_message = f"""
+            <session_context date="{target_date}" muscle_group="{mg}">
             
-            ai_prescription = call_ai_coach(ai_payload, client)
+              <data_inventory_manifest>
+                CRITICAL NOTICE: The complete history and current plan data for the following flagged exercises are ALREADY loaded below. 
+                You DO NOT need to call QUERY_DATABASE or QUERY_PLAN for them:
+                {chr(10).join(f"- {name}" for name in flagged_exercise_names)}
+                
+                *Note: You may still use QUERY_DATABASE if the user introduces new symptoms that require checking OTHER unlisted auxiliary exercises.*
+              </data_inventory_manifest>
+            
+              <global_lifestyle_context>
+                {json.dumps(daily_context, indent=2)}
+              </global_lifestyle_context>
+            
+              <flagged_sets>
+                {json.dumps(flags, indent=2)}
+              </flagged_sets>
+            
+              <pre_fetched_current_plan>
+                {json.dumps(current_plan_data, indent=2)}
+              </pre_fetched_current_plan>
+            
+              <pre_fetched_exercise_history>
+                {json.dumps(pre_fetched_histories, indent=2)}
+              </pre_fetched_exercise_history>
+            
+              <active_issues>
+                {json.dumps(history["active_issues"], indent=2)}
+              </active_issues>
+            
+            </session_context>
+            """
+            # print("\n" + "="*40 + " INITIAL PAYLOAD DEBUG " + "="*40)
+            # print(initial_user_message)
+            # print("="*103 + "\n")
+            ai_prescription = call_ai_coach(initial_user_message, ai_payload, client)
+        
+            
+            
             
             if ai_prescription:
                 print("\n✅ FINAL AI PRESCRIPTION:")
@@ -386,6 +452,6 @@ if __name__ == "__main__":
         print("Error: GROQ_API_KEY environment variable not found.")
         print("Run this in your terminal first: $env:GROQ_API_KEY=\"your_key_here\"")
     else:
-        run_pipeline('2026-01-25', api_key)
+        run_pipeline('2026-01-27', api_key)
 
 #very poor,very high,high,poor,high,high,Poor recovery and noticeable soreness before training.

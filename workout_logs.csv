@@ -50,5 +50,5 @@ id,date,exercise,muscle_group,set number,reps,weight,rir,problems,plan_id,day_na
 52,2026-01-25,chest_supported_rows,Pull,2,8,50.0,1,,plan_002,Upper_A
 53,2026-01-25,lat_pulldowns,Pull,1,9,65.0,1,,plan_002,Upper_A
 48,2026-01-27,squats,Legs,1,3,100.0,0,,plan_002,Lower_A
-49,2026-01-27,romanian_deadlift,Legs,1,6,90.0,0,,plan_002,Lower_A
+49,2026-01-27,romanian_deadlift,Legs,1,5,90.0,0,,plan_002,Lower_A
 50,2026-01-27,leg_curls,Legs,1,10,40.0,0,,plan_002,Lower_A
