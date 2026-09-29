@@ -5,4 +5,4 @@ date,plan_id,day_name,sleep,fatigue,physical_activity,nutrition,stress,soreness_
 2026-01-18,plan_001,Push,poor,high,high,poor,high,moderate,Felt generally run down before training.
 2026-01-20,plan_001,Pull,normal,normal,normal,normal,normal,normal,No unusual issues.
 2026-01-25,plan_002,Upper_A,normal,normal,normal,normal,normal,normal,No unusual issues.
-2026-01-27,plan_002,Lower_A,very poor,very high,high,poor,high,high,Poor recovery and noticeable soreness before training.
+2026-01-27,plan_002,Lower_A,normal,normal,normal,normal,normal,normal,No unusual issues.

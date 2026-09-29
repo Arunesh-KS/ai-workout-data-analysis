@@ -1,5 +1,5 @@
 exercise,muscle_group,target_sets,target_reps,target_weight_kg,target_rir,last_updated,ai_instructions
-barbell_bench_press,Push,3,8,82.5,2,2026-01-01,
+barbell_bench_press,Push,3,8,82.5,1,2026-01-01,
 chest_flys,Push,3,12,17.5,1,2026-01-01,
 dumbell_bench_press,Push,3,10,32.5,2,2026-01-01,
 seated_overhead_dumbell_press,Push,3,8,25.0,2,2026-01-01,

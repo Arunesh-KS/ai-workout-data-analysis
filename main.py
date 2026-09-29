@@ -139,67 +139,58 @@ investigate the available evidence, form plausible hypotheses, gather
 the most useful missing information, and only then decide whether an
 intervention is justified.
 
-You have four tools available:
+--------------------------------------------------
+THE 10 POTENTIAL CAUSES (DIFFERENTIAL DIAGNOSIS)
+--------------------------------------------------
+You must actively track the status of these specific causes in your `investigation_state`. 
+Do not invent new cause IDs. Use exactly these:
 
-1. "QUERY_DATABASE"
-   Look up recent performance history for a specific exercise.
+1. `inadequate_recovery`: Systemic lifestyle fatigue (poor sleep, high daily steps, caloric deficit, life stress).
+2. `inadequate_stimulus`: Volume is too low; the muscle isn't getting enough work to grow.
+3. `training_load_mismatch`: Volume/intensity is too high; CNS burnout or systemic overtraining.
+4. `pain_soreness`: Acute joint pain, injury, or severe lingering DOMS preventing force generation.
+5. `technique_issue`: Form breakdown, range-of-motion changes, grip slipping, or tempo alterations.
+6. `program_change`: Recent overarching changes to the plan structure (days split, frequency).
+7. `exercise_order`: The lift was moved later in the session and is suffering from cumulative session fatigue.
+8. `local_interference`: A preceding exercise severely fatigued the specific prime movers for this lift.
+9. `target_mismatch`: The predicted target was simply unrealistic or mathematically miscalculated.
+10. `measurement_issue`: Logging error, skipped exercise, or equipment variation (e.g., different machine).
 
-2. "ASK_USER"
-   Ask the user for information that is not available in the database,
-   such as sleep, fatigue, pain characteristics, recent activities,
-   nutrition, stress, or upcoming training/recovery circumstances.
+--------------------------------------------------
+INVESTIGATION STATE MANAGEMENT (YOUR WHITEBOARD)
+--------------------------------------------------
+On EVERY turn, you must output an updated `investigation_state`:
+- Update the `status` of each `potential_cause` (e.g., from 'possible' to 'ruled_out' or 'supported').
+- Add concise bullet points to `supporting_evidence` or `evidence_against`.
+- Append confirmed, undeniable truths to `established_facts`.
+- Maintain a list of `unresolved_questions` that dictate your next tool calls.
 
-3. "QUERY_PLAN"
-   Look up the user's current or previous workout plan.
-
-4. "FINALIZE_DIAGNOSIS"
-   Finish the investigation and provide the most appropriate recommendation.
-   A recommendation does NOT necessarily mean changing the program.
-   If the evidence suggests the problem is temporary or isolated, you may
-   recommend continuing the existing program without modification.
-   remembeer to provide an output for the issue log , irresepctive of whether the diagnosis is a change or not.
+--------------------------------------------------
+AVAILABLE TOOLS (ACTIONS)
+--------------------------------------------------
+1. "QUERY_DATABASE": Look up recent performance history for a specific exercise.
+2. "ASK_USER": Ask the user for highly specific information.
+3. "QUERY_PLAN": Look up the user's "current" or "previous" workout plan.
+4. "FINALIZE_DIAGNOSIS": Finish the investigation and prescribe target adjustments or maintain current targets. 
+   *Note: Always provide an issue_log_update, even if the diagnosis requires no target changes.*
 
 --------------------------------------------------
 INVESTIGATION PRINCIPLES
 --------------------------------------------------
-
 1. RETRIEVE BEFORE ASKING
-If the information may already exist in the database or workout-plan
-history, retrieve it before asking the user.
-
-The user's baseline lifestyle factors for this specific workout are ALREADY 
-provided in the initial payload under `global_session_context`.
+The user's baseline lifestyle factors are ALREADY provided in the initial payload under `global_session_context`.
 - You MUST read this context first. 
-- Do NOT use the ASK_USER tool to ask about sleep, nutrition, general fatigue, 
-  overall stress, or general soreness. That data is already in front of you.
-- ONLY use the ASK_USER tool if you need highly specific mechanical details 
-  (e.g., "Where exactly in the elbow does it hurt during the pushdown?"). or if you need to clarify a specific recent event that may have affected training. or if you need more info regarding the user's lifestyle context that is not already provided in the initial payload.
+- Do NOT use ASK_USER for general sleep, nutrition, or overall stress if it is already provided.
+- ONLY use ASK_USER for highly specific mechanical details or to clarify an unresolved hypothesis.
 
-2. DO NOT FORCE A DIAGNOSIS
-If the evidence is insufficient, continue investigating.
-Explicitly distinguish between:
-- strongly supported explanation
-- plausible explanation
-- unresolved possibility
+2. ELIMINATION OVER GUESSING
+If evidence contradicts a cause, mark it as 'ruled_out' and add the contradiction to `evidence_against`. Narrow down the list until only the true root cause remains.
 
-3. INVESTIGATE PATTERNS, NOT JUST INDIVIDUAL EXERCISES
-When an exercise stalls or declines, determine whether the problem is isolated
-or affecting several related lifts. You may query multiple relevant exercises
-in a single turn to evaluate this pattern efficiently.
+3. PATTERNS OVER ISOLATION
+When an exercise stalls, query multiple relevant exercises (e.g., all Push movements, or all leg movements) to see if the problem is systemic or isolated.
 
-4. ALWAYS CONSIDER RECENT PROGRAM CHANGES
-Use QUERY_PLAN to inspect current or previous structures when relevant.
-
-5. CONSIDER TEMPORARY VS PERSISTENT PROBLEMS
-A single bad session does not automatically justify changing targets.
-Distinguish acute flukes from chronic trends.
-
-6. EVERY PRESCRIPTION MUST BE EVIDENCE-BASED
-Make sure you have investigated an exercise's history before adjusting it.
-
-7. PAIN REQUIRES CAUTION
-Use language like "may be contributing" or "is consistent with".
-Never claim a definitive medical diagnosis.
+4. TEMPORARY VS PERSISTENT
+Distinguish acute flukes (one bad day) from chronic trends (3 weeks of stalling).
 
 --------------------------------------------------
 DATABASE DIRECTORY
@@ -208,41 +199,51 @@ When using QUERY_DATABASE, you MUST select the exact exercise name from:
 {valid_exercises}
 
 --------------------------------------------------
-OUTPUT FORMAT
+CRITICAL FORMATTING & ANTI-HALLUCINATION RULES
 --------------------------------------------------
 You MUST respond in strict JSON format matching this exact schema:
 {schema_instructions}
 
 MULTI-QUERY BATCHING:
-You may include MULTIPLE actions in the "actions" array if you need data on
-multiple exercises or need both the database and plan details at once.
-""" 
+You may include MULTIPLE actions in the "actions" array if you need data on multiple exercises or plans simultaneously.
+
+"""
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"Initial Payload: {json.dumps(payload)}"}
     ]
-
+    total_tokens = 0
+    total_input_tokens = 0
+    total_output_tokens = 0
+    interaction_count = 0
+    
     while True:
         try:
             response = client.chat.completions.create(
-                model="openai/gpt-oss-20b", 
+                model="openai/gpt-oss-120b", 
                 messages=messages,
                 temperature=0.0,
                 response_format={"type": "json_object"}
             )
             
+            usage = response.usage
+            total_tokens += usage.total_tokens
+            total_input_tokens += usage.prompt_tokens
+            total_output_tokens += usage.completion_tokens
+            interaction_count += 1
+            
+            print(f"📊 Tokens: {usage.prompt_tokens} In | {usage.completion_tokens} Out | {usage.total_tokens} Total")
+            
             response_content = response.choices[0].message.content
             
-            # 1. ALWAYS append the assistant's output to retain dialogue history
-            messages.append({"role": "assistant", "content": response_content})
-            
-            # 2. Parse and validate through Pydantic
+            # 1. Parse and validate through Pydantic
             parsed_envelope = agent_adapter.validate_json(response_content)
             actions_list = parsed_envelope.actions
+            investigation_state = parsed_envelope.investigation_state
 
             system_results = []
-            ask_user_encountered = False
 
+            # 2. Execute Actions
             for action in actions_list:
                 if action.action_type == "QUERY_DATABASE":
                     print(f"🔍 AI is looking up history for: {action.exercise_to_query}")
@@ -255,29 +256,43 @@ multiple exercises or need both the database and plan details at once.
                     system_results.append(f"Plan ({action.query_type}): {data}")
                     
                 elif action.action_type == "ASK_USER":
-                    print(f"🧠 AI Reasoning: {action.reasoning}")
+                    # NOTE: Updated from .reasoning to .rationale to match your new schema!
+                    print(f"🧠 AI Reasoning: {action.rationale}") 
                     print(f"🗣️ COACH: {action.question}")
                     user_answer = input("👉 YOUR ANSWER: ")
                     system_results.append(f"USER ANSWER: {user_answer}")
-                    ask_user_encountered = True
                     # Stop batch if user interaction is needed
                     break 
                     
                 elif action.action_type == "FINALIZE_DIAGNOSIS":
-                    # print("\n✅ FINAL AI PRESCRIPTION:")
-                    # print(f"Diagnosis: {action.analysis}")
-                    # for adj in action.adjustments:
-                    #     print(f"  - {adj.exercise} Target: {adj.new_target_weight_kg}kg x {adj.new_target_reps} @ RIR {adj.new_target_rir}")
-                    #     print(f"    Cue: {adj.ai_instructions}")
+                    print("total tokens used in this session: ", total_tokens)
+                    print(f"Total Input Tokens: {total_input_tokens}")
+                    print(f"Total Output Tokens: {total_output_tokens}")
+                    print(f"Number of User Interactions: {interaction_count}")
                     return action.model_dump()
 
-            # 3. Feed gathered results back to the agent in a single turn
+            # 3. 🗜️ STATE COMPRESSION: Rebuild messages array instead of appending
             if system_results:
                 combined_results = "\n---\n".join(system_results)
-                messages.append({
-                    "role": "user",
-                    "content": f"SYSTEM TOOL RESULTS:\n{combined_results}"
-                })
+                
+                # Convert the Pydantic state model directly to a formatted JSON string
+                state_json = investigation_state.model_dump_json(indent=2)
+                
+                messages = [
+                    messages[0], # [0] Keep System Prompt
+                    messages[1], # [1] Keep Initial User Payload
+                    {
+                        # [2] Inject the AI's internal whiteboard memory
+                        "role": "assistant",
+                        "content": f"CURRENT INVESTIGATION STATE:\n{state_json}"
+                    },
+                    {
+                        # [3] Pass the new data it requested
+                        "role": "user",
+                        "content": f"SYSTEM TOOL RESULTS:\n{combined_results}"
+                    }
+                ]
+                print("🗜️ [Context Compressed using Investigation State]")
                 
         except Exception as e:
             print(f"Agent Loop Error: {e}")
@@ -346,3 +361,5 @@ if __name__ == "__main__":
         print("Run this in your terminal first: $env:GROQ_API_KEY=\"your_key_here\"")
     else:
         run_pipeline('2026-01-27', api_key)
+
+#very poor,very high,high,poor,high,high,Poor recovery and noticeable soreness before training.
