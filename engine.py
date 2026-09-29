@@ -1,17 +1,15 @@
 import pandas as pd
 
+import pandas as pd
+
 class ProgressionEngine:
     def __init__(self):
         self.logs_path = 'workout_logs.csv'
-        self.plan_path = 'active_target.csv'
+        self.plan_path = 'workout_plans.csv' # Replaced active_target!
         self.issues_path = 'issue_log.csv'
 
-    def calculate_e1rm(self, weight, reps, rir):
-        """Calculates true strength capacity based on RIR."""
-        return weight * (1 + 0.0333 * (reps + rir))
-
     def sweep_session(self, target_date):
-        """Phase 1: Sweep the session, compare to targets, and route."""
+        """Phase 1: Sweep the session, compare every individual set to its target, and route."""
         logs = pd.read_csv(self.logs_path)
         plan = pd.read_csv(self.plan_path)
         
@@ -19,67 +17,76 @@ class ProgressionEngine:
         session_logs = logs[logs['date'] == target_date].copy()
         session_logs['problems'] = session_logs['problems'].fillna("")
         
+        # Automatically assign a 'set_index' (1, 2, 3...) based on the order logged in the CSV
+        session_logs['set_index'] = session_logs.groupby('exercise').cumcount() + 1
+
         fast_path_updates = []
         ai_routing_queue = []
 
-        # Group sets by exercise
-        grouped = session_logs.groupby(['exercise', 'muscle_group'])
+        # We now evaluate EVERY SINGLE SET completely independently!
+        # We now evaluate EVERY SINGLE SET completely independently!
+        for _, log_row in session_logs.iterrows():
+            exercise = log_row['exercise']
+            set_index = log_row['set_index']
+            problems = str(log_row['problems']).strip()
+            has_problem = len(problems) > 0
+            muscle_group = log_row['muscle_group']
 
-        for (exercise, muscle_group), group in grouped:
-            # 1. Check for explicit user problems
-            problems = " | ".join(filter(None, set(group['problems'])))
-            has_problem = len(problems.strip()) > 0
-
-            # 2. Fetch the target for this exercise
-            plan_row = plan[plan['exercise'] == exercise]
-            if not plan_row.empty:
-                target_w = plan_row.iloc[0]['target_weight_kg']
-                target_r = plan_row.iloc[0]['target_reps']
-                target_rir = plan_row.iloc[0]['target_rir']
-                target_e1rm = self.calculate_e1rm(target_w, target_r, target_rir)
-            else:
-                target_e1rm = 0  # No target exists yet (new exercise)
-
-            # 3. Calculate actual performance
-            group['e1rm'] = group.apply(lambda row: self.calculate_e1rm(row['weight'], row['reps'], row['rir']), axis=1)
-            actual_max_e1rm = group['e1rm'].max()
+            # 1. 🐛 FIX: Get all planned rows for this exercise and sort them by global order
+            plan_sets = plan[plan['exercise'] == exercise].sort_values('order')
             
-            # Find the best set to base the next progression on
-            best_set = group.loc[group['e1rm'].idxmax()]
+            # If the user logged more sets than planned, skip the extra ones
+            if len(plan_sets) < set_index:
+                continue 
 
-            # Did true strength drop below the target? (using a 2% variance buffer)
-            missed_target = actual_max_e1rm < (target_e1rm * 0.98) 
+            # Select the exact set matching the local set index (0-indexed list, so set_index - 1)
+            plan_row = plan_sets.iloc[set_index - 1]
+            
+            # Extract target variables
+            target_w = plan_row['current_target_weight(kg)']
+            target_r = plan_row['current_target_reps']
+            upper_reps = plan_row['upper_reps']
+            lower_reps = plan_row['lower_reps']
+            increment = plan_row['weight_increment(kg)']
+            
+            # 🐛 FIX 2: Grab the true global order so the fast_path can update the correct CSV row later!
+            true_global_order = int(plan_row['order']) 
 
-            # ROUTING LOGIC
+            # Extract actual performance
+            actual_w = log_row['weight']
+            actual_r = log_row['reps']
+
+            # 2. Did they miss the target? 
+            missed_target = (actual_w < target_w) or (actual_w == target_w and actual_r < target_r)
+
+            # 3. ROUTING LOGIC
             if has_problem or missed_target:
-                # Trigger Slow Path
+                # 🛑 SLOW PATH 
                 ai_routing_queue.append({
                     'exercise': exercise,
-                    'muscle_group': muscle_group,
+                    'muscle_group': muscle_group, 
+                    'set_index': set_index,
                     'problem_note': problems,
                     'status': 'Stall/Regression' if missed_target else 'User Note',
-                    'actual_e1rm': float(actual_max_e1rm),
-                    'target_e1rm': float(target_e1rm),
-                    'best_weight': float(best_set['weight']),
-                    'best_reps': int(best_set['reps']),
-                    'best_rir': int(best_set['rir'])
+                    'actual_weight': float(actual_w),
+                    'actual_reps': int(actual_r),
+                    'target_weight': float(target_w),
+                    'target_reps': int(target_r)
                 })
             else:
-                # Trigger Fast Path (Deterministic Increment)
-                theoretical_reps = best_set['reps'] + best_set['rir']
-                if theoretical_reps >= 12:
-                    new_w = best_set['weight'] + 2.5
-                    new_r = 8
+                # ⚡ FAST PATH 
+                if actual_r >= upper_reps:
+                    new_w = actual_w + increment
+                    new_r = lower_reps 
                 else:
-                    new_w = best_set['weight']
-                    new_r = best_set['reps'] + 1
+                    new_w = actual_w
+                    new_r = actual_r + 1
 
                 fast_path_updates.append({
                     'exercise': exercise,
-                    'target_weight_kg': new_w,
-                    'target_reps': new_r,
-                    'target_rir': 1, 
-                    'ai_instructions': "" # Clear AI instructions on success
+                    'order': true_global_order, # <-- FIX: Now passes the exact CSV row order!
+                    'new_target_weight_kg': new_w,
+                    'new_target_reps': new_r
                 })
 
         return fast_path_updates, ai_routing_queue

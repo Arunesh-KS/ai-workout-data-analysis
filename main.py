@@ -19,6 +19,7 @@ def get_user_exercise_catalog(filepath='workout_logs.csv'):
         return logs['exercise'].dropna().unique().tolist()
     except FileNotFoundError:
         return []
+
 def get_issue_history(muscle_group, filepath='issue_log.csv'):
     try:
         issues = pd.read_csv(filepath)
@@ -34,11 +35,37 @@ def get_issue_history(muscle_group, filepath='issue_log.csv'):
         "past_rectified_issues": rectified.to_dict(orient='records')
     }
 
-def get_healthy_exercises(target_date, muscle_group, logs_path, flagged_exercises):
-    logs = pd.read_csv(logs_path)
-    session_logs = logs[(logs['date'] == target_date) & (logs['muscle_group'] == muscle_group)]
-    all_exercises_today = session_logs['exercise'].unique()
-    return [ex for ex in all_exercises_today if ex not in flagged_exercises]
+def get_healthy_sets(target_date, muscle_group, logs_path, flagged_queue_items):
+    """Returns all sets for a muscle group that successfully hit their targets."""
+    try:
+        logs = pd.read_csv(logs_path)
+    except FileNotFoundError:
+        return []
+        
+    session = logs[(logs['date'] == target_date) & (logs['muscle_group'] == muscle_group)].copy()
+    
+    if session.empty:
+        return []
+        
+    # Recreate the set_index exactly as we did in the engine
+    session['set_index'] = session.groupby('exercise').cumcount() + 1
+    
+    # Create a fast lookup of explicitly flagged sets: e.g., {('squats', 2), ('squats', 3)}
+    flagged_tuples = {(item['exercise'], item['set_index']) for item in flagged_queue_items}
+    
+    healthy_sets = []
+    for _, row in session.iterrows():
+        # If this specific set wasn't flagged, it's healthy!
+        if (row['exercise'], row['set_index']) not in flagged_tuples:
+            healthy_sets.append({
+                'exercise': row['exercise'],
+                'set_index': row['set_index'],
+                'weight': float(row['weight']),
+                'reps': int(row['reps']),
+                'rir': int(row['rir'])
+            })
+            
+    return healthy_sets
 
 def fetch_exercise_history(exercise_name: str, filepath='workout_logs.csv', limit=3):
     """New helper for the AI to query historical performance of any exercise."""
@@ -50,10 +77,17 @@ def fetch_exercise_history(exercise_name: str, filepath='workout_logs.csv', limi
         return ex_logs.to_dict(orient='records')
     except Exception as e:
         return f"Database Error: {e}"
+
 def fetch_plan_history(query_type: str, filepath='workout_plans.csv'):
     """Fetches the current active plan or the most recent previous plan."""
     try:
         plans = pd.read_csv(filepath)
+        
+        # Columns to extract based on the new row-per-set schema
+        plan_cols = [
+            'order', 'exercise', 'lower_reps', 'upper_reps', 
+            'rir', 'weight_increment(kg)', 'current_target_weight(kg)', 'current_target_reps'
+        ]
         
         if query_type == "current":
             # Active plans have no end_date
@@ -63,7 +97,7 @@ def fetch_plan_history(query_type: str, filepath='workout_plans.csv'):
             
             # Group by day and sort by execution order
             structured_plan = current_plan.groupby('day_name').apply(
-                lambda x: x.sort_values('order')[['order', 'exercise']].to_dict('records')
+                lambda x: x.sort_values('order')[plan_cols].to_dict('records')
             ).to_dict()
             
             return {
@@ -83,7 +117,7 @@ def fetch_plan_history(query_type: str, filepath='workout_plans.csv'):
             last_plan_data = past_plans[past_plans['plan_id'] == last_plan_id]
             
             structured_plan = last_plan_data.groupby('day_name').apply(
-                lambda x: x.sort_values('order')[['order', 'exercise']].to_dict('records')
+                lambda x: x.sort_values('order')[plan_cols].to_dict('records')
             ).to_dict()
             
             return {
@@ -95,6 +129,7 @@ def fetch_plan_history(query_type: str, filepath='workout_plans.csv'):
             }
     except Exception as e:
         return f"Database Error: {e}"
+
 import csv
 
 def fetch_session_context(target_date: str) -> dict:
@@ -115,12 +150,20 @@ def fetch_session_context(target_date: str) -> dict:
         "other_notes": "No data recorded for this session."
     }
 
+
 # ==========================================
 # 3. THE AGENTIC LOOP
 # ==========================================
 
 import json
 from pydantic import TypeAdapter
+
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        # Automatically convert Pandas/NumPy int64 and float64 to native Python types
+        if hasattr(obj, 'item'):
+            return obj.item()
+        return super().default(obj)
 
 def call_ai_coach(payload, client):
     """The interactive ReAct state machine supporting multi-action turns."""
@@ -142,32 +185,35 @@ intervention is justified.
 --------------------------------------------------
 THE 10 POTENTIAL CAUSES (DIFFERENTIAL DIAGNOSIS)
 --------------------------------------------------
-You must actively track the status of these specific causes in your `investigation_state`. 
-Do not invent new cause IDs. Use exactly these:
+You must actively track the status of these specific cause IDs. 
+Do not invent new IDs. Use exactly these strings:
 
-1. `inadequate_recovery`: Systemic lifestyle fatigue (poor sleep, high daily steps, caloric deficit, life stress).
-2. `inadequate_stimulus`: Volume is too low; the muscle isn't getting enough work to grow.
-3. `training_load_mismatch`: Volume/intensity is too high; CNS burnout or systemic overtraining.
-4. `pain_soreness`: Acute joint pain, injury, or severe lingering DOMS preventing force generation.
-5. `technique_issue`: Form breakdown, range-of-motion changes, grip slipping, or tempo alterations.
-6. `program_change`: Recent overarching changes to the plan structure (days split, frequency).
-7. `exercise_order`: The lift was moved later in the session and is suffering from cumulative session fatigue.
-8. `local_interference`: A preceding exercise severely fatigued the specific prime movers for this lift.
-9. `target_mismatch`: The predicted target was simply unrealistic or mathematically miscalculated.
-10. `measurement_issue`: Logging error, skipped exercise, or equipment variation (e.g., different machine).
+1. "inadequate_recovery": Systemic lifestyle fatigue (poor sleep, high daily steps, caloric deficit, life stress).
+2. "inadequate_stimulus": Volume is too low; the muscle isn't getting enough work to grow.
+3. "training_load_mismatch": Volume/intensity is too high; CNS burnout or systemic overtraining.
+4. "pain_soreness": Acute joint pain, injury, or severe lingering DOMS preventing force generation.
+5. "technique_issue": Form breakdown, range-of-motion changes, grip slipping, or tempo alterations.
+6. "program_change": Recent overarching changes to the plan structure (days split, frequency).
+7. "exercise_order": The lift was moved later in the session and is suffering from cumulative session fatigue.
+8. "local_interference": A preceding exercise severely fatigued the specific prime movers for this lift.
+9. "target_mismatch": The predicted target was simply unrealistic or mathematically miscalculated.
+10. "measurement_issue": Logging error, skipped exercise, or equipment variation (e.g., different machine).
 
 --------------------------------------------------
 INVESTIGATION STATE MANAGEMENT (YOUR WHITEBOARD)
 --------------------------------------------------
-On EVERY turn, you must output an updated `investigation_state`:
-- Update the `status` of each `potential_cause` (e.g., from 'possible' to 'ruled_out' or 'supported').
-- Add concise bullet points to `supporting_evidence` or `evidence_against`.
-- Append confirmed, undeniable truths to `established_facts`.
-- Maintain a list of `unresolved_questions` that dictate your next tool calls.
+On EVERY turn, you must output an updated, ultra-compact `investigation_state` using these exact rules:
+- `active_hypotheses`: List the exact cause IDs from above that are still plausible.
+- `ruled_out_hypotheses`: List the cause IDs you have confidently eliminated based on evidence.
+- `established_facts`: CRITICAL MEMORY. Write a dense bulleted list of the exact weights, reps, dates, plan changes, and user quotes you have retrieved. You MUST write the actual numbers here so you do not forget them and do not need to re-query the commands later.
+- `unresolved_questions`: State exactly what specific information you still need to find out.
+
+Remember to update the established_facts such that you do not need to re-query the commands or ask user later. Do not leave any important numbers out. You could give it a bit of context but do not write a long paragraph. Use bullet points and keep it concise. add all the tiny details you have learned so far. This is your CRITICAL MEMORY for the investigation.
 
 --------------------------------------------------
-AVAILABLE TOOLS (ACTIONS)
+AVAILABLE COMMANDS (ACTIONS)
 --------------------------------------------------
+Use these COMMANDS only when the information is not already available in the `global_session_context` or your established facts.
 1. "QUERY_DATABASE": Look up recent performance history for a specific exercise.
 2. "ASK_USER": Ask the user for highly specific information.
 3. "QUERY_PLAN": Look up the user's "current" or "previous" workout plan.
@@ -175,7 +221,7 @@ AVAILABLE TOOLS (ACTIONS)
    *Note: Always provide an issue_log_update, even if the diagnosis requires no target changes.*
 
 --------------------------------------------------
-INVESTIGATION PRINCIPLES
+INVESTIGATION PRINCIPLES & OVERRIDES
 --------------------------------------------------
 1. RETRIEVE BEFORE ASKING
 The user's baseline lifestyle factors are ALREADY provided in the initial payload under `global_session_context`.
@@ -184,13 +230,18 @@ The user's baseline lifestyle factors are ALREADY provided in the initial payloa
 - ONLY use ASK_USER for highly specific mechanical details or to clarify an unresolved hypothesis.
 
 2. ELIMINATION OVER GUESSING
-If evidence contradicts a cause, mark it as 'ruled_out' and add the contradiction to `evidence_against`. Narrow down the list until only the true root cause remains.
+If evidence strongly contradicts a cause, mark it as 'ruled_out' and add the contradiction to `evidence_against`. Narrow down the list until only the true root cause remains.
 
-3. PATTERNS OVER ISOLATION
-When an exercise stalls, query multiple relevant exercises (e.g., all Push movements, or all leg movements) to see if the problem is systemic or isolated.
+3. OVERRIDING THE FAST PATH (CRITICAL)
+Your payload contains `pending_fast_path_updates`. These are the automatic weight progressions the system is planning to apply to healthy sets.
+If you discover an injury, severe fatigue, or technique cheat that affects the entire session, you have the authority to issue target adjustments for sets that are currently in the `pending_fast_path_updates`. Any adjustment you make in FINALIZE_DIAGNOSIS will overwrite the Fast Path.
+4. HOW TO READ THE PLAN DATA
+When you use QUERY_PLAN, the schedule returns a list of items based on 'order'. 
+CRITICAL RULE: Each individual item (row) in that schedule represents EXACTLY ONE PRESCRIBED SET. If you see two entries for "squats", that means the plan prescribes exactly 2 sets. Do NOT ask the user how many sets are prescribed; count the entries yourself. and remember , different sets of the same exercise may have different targets, so you must treat each set as a separate entity.
+lower_reps and upper_reps are the target rep range for that specific set. weight_increment is the weight increment for that specific set. current_target_weight(kg) and current_target_reps are the exact targets for that set when higher reps are met . weight_increment(kg) is the amount to increase the target weight if the set is successful.
+5. TRUST YOUR WHITEBOARD
+Before adding a question to `unresolved_questions` or issuing a retrieval command, you MUST check if the answer is already in your `established_facts`. NEVER re-query the database or plan for information you already possess.
 
-4. TEMPORARY VS PERSISTENT
-Distinguish acute flukes (one bad day) from chronic trends (3 weeks of stalling).
 
 --------------------------------------------------
 DATABASE DIRECTORY
@@ -206,11 +257,16 @@ You MUST respond in strict JSON format matching this exact schema:
 
 MULTI-QUERY BATCHING:
 You may include MULTIPLE actions in the "actions" array if you need data on multiple exercises or plans simultaneously.
+However:
+- NEVER include ASK_USER in the same response as QUERY_DATABASE or QUERY_PLAN.
+- NEVER include FINALIZE_DIAGNOSIS in the same response as QUERY_DATABASE, QUERY_PLAN, or ASK_USER.
+- If additional retrieved information could affect what question should be asked, retrieve it first.
+- After retrieval results are returned, reassess the investigation state before choosing the next command.
 
 """
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Initial Payload: {json.dumps(payload)}"}
+        {"role": "user", "content": f"Initial Payload: {json.dumps(payload, cls=CustomJSONEncoder)}"}
     ]
     total_tokens = 0
     total_input_tokens = 0
@@ -220,7 +276,7 @@ You may include MULTIPLE actions in the "actions" array if you need data on mult
     while True:
         try:
             response = client.chat.completions.create(
-                model="openai/gpt-oss-120b", 
+                model="openai/gpt-oss-20b", 
                 messages=messages,
                 temperature=0.0,
                 response_format={"type": "json_object"}
@@ -241,6 +297,14 @@ You may include MULTIPLE actions in the "actions" array if you need data on mult
             actions_list = parsed_envelope.actions
             investigation_state = parsed_envelope.investigation_state
 
+            # ==========================================
+            # 👁️ PRINT THE AI'S MENTAL WHITEBOARD 
+            # ==========================================
+            print("\n" + "="*50)
+            print("📝 CURRENT INVESTIGATION STATE:")
+            print(investigation_state.model_dump_json(indent=2))
+            print("="*50 + "\n")
+
             system_results = []
 
             # 2. Execute Actions
@@ -256,7 +320,6 @@ You may include MULTIPLE actions in the "actions" array if you need data on mult
                     system_results.append(f"Plan ({action.query_type}): {data}")
                     
                 elif action.action_type == "ASK_USER":
-                    # NOTE: Updated from .reasoning to .rationale to match your new schema!
                     print(f"🧠 AI Reasoning: {action.rationale}") 
                     print(f"🗣️ COACH: {action.question}")
                     user_answer = input("👉 YOUR ANSWER: ")
@@ -275,21 +338,22 @@ You may include MULTIPLE actions in the "actions" array if you need data on mult
             if system_results:
                 combined_results = "\n---\n".join(system_results)
                 
-                # Convert the Pydantic state model directly to a formatted JSON string
-                state_json = investigation_state.model_dump_json(indent=2)
-                
+                # Format the assistant memory so the model sees a complete envelope
+                compressed_assistant_payload = json.dumps({
+                    "investigation_state": investigation_state.model_dump(),
+                    "actions": []  # Anchor the schema so it remembers actions are inside JSON
+                }, indent=2)
+
                 messages = [
-                    messages[0], # [0] Keep System Prompt
-                    messages[1], # [1] Keep Initial User Payload
+                    messages[0],  # System Prompt
+                    messages[1],  # Initial User Payload
                     {
-                        # [2] Inject the AI's internal whiteboard memory
                         "role": "assistant",
-                        "content": f"CURRENT INVESTIGATION STATE:\n{state_json}"
+                        "content": compressed_assistant_payload
                     },
                     {
-                        # [3] Pass the new data it requested
                         "role": "user",
-                        "content": f"SYSTEM TOOL RESULTS:\n{combined_results}"
+                        "content": f"SYSTEM COMMAND RESULTS / USER UPDATE:\n{combined_results}"
                     }
                 ]
                 print("🗜️ [Context Compressed using Investigation State]")
@@ -297,6 +361,8 @@ You may include MULTIPLE actions in the "actions" array if you need data on mult
         except Exception as e:
             print(f"Agent Loop Error: {e}")
             return None
+    
+
 
 # ==========================================
 # 4. MAIN PIPELINE
@@ -309,10 +375,7 @@ def run_pipeline(target_date, api_key):
     print(f"\n--- RUNNING SESSION ANALYSIS FOR {target_date} ---")
     fast_path_updates, ai_routing_queue = engine.sweep_session(target_date)
     
-    if fast_path_updates:
-        print("\n✅ FAST PATH (DETERMINISTIC INCREMENTS):")
-        for update in fast_path_updates:
-            print(f"  - {update['exercise']}: target updated to {update['target_weight_kg']}kg x {update['target_reps']} @ RIR {update['target_rir']}")
+    # We delay printing/committing Fast Path here so AI can potentially overwrite them.
             
     if ai_routing_queue:
         print("\n⚠️ AI INTERVENTION REQUIRED:")
@@ -323,17 +386,21 @@ def run_pipeline(target_date, api_key):
             if mg not in grouped_issues:
                 grouped_issues[mg] = []
             grouped_issues[mg].append(item)
+            
         daily_context = fetch_session_context(target_date) 
+        
         for mg, flags in grouped_issues.items():
             print(f"\nGathering context for muscle group: [{mg}]...")
-            flagged_names = [f['exercise'] for f in flags]
+            
             history = get_issue_history(mg)
             
+            # Pass the flagged sets, healthy sets, and pending fast_path updates to the AI payload
             ai_payload = {
                 "muscle_group": mg,
-                "flagged_exercises": flags,
+                "flagged_sets": flags, 
+                "healthy_sets_today": get_healthy_sets(target_date, mg, 'workout_logs.csv', flags),
+                "pending_fast_path_updates": fast_path_updates,
                 "global_session_context": daily_context,
-                "healthy_exercises_today": get_healthy_exercises(target_date, mg, 'workout_logs.csv', flagged_names),
                 "active_issues": history["active_issues"],
                 "past_rectified_issues": history["past_rectified_issues"]
             }
@@ -344,15 +411,23 @@ def run_pipeline(target_date, api_key):
                 print("\n✅ FINAL AI PRESCRIPTION:")
                 print(f"  Diagnosis: {ai_prescription['analysis']}")
                 for adj in ai_prescription['adjustments']:
-                    print(f"  - {adj['exercise']} Target Updated: {adj['new_target_weight_kg']}kg x {adj['new_target_reps']} @ RIR {adj['new_target_rir']}")
+                    # Note: We expect the AI to now include the set_index or order alongside the exercise
+                    set_idx = adj.get('set_index', 'N/A')
+                    print(f"  - {adj['exercise']} (Set {set_idx}) Target Updated: {adj['new_target_weight_kg']}kg x {adj['new_target_reps']} @ RIR {adj['new_target_rir']}")
                     print(f"  - Cue: {adj['ai_instructions']}")
                     
                 print("\n📝 PROPOSED ISSUE LOG UPDATES:")
-                for adj in ai_prescription['adjustments']:
-                    log_append_data = adj.get('issue_log_append')
-                    if log_append_data:
-                        generated_advice = log_append_data.get('ai_advice', 'No advice recorded.')
-                        print(f"  - APPEND TO issue_log.csv: {target_date} | {adj['exercise']} | {mg} | {log_append_data.get('issue_type', 'Problem')} | {log_append_data.get('description', '')} | Active | \"{generated_advice}\"")
+                for log_update in ai_prescription.get('issue_log_updates', []):
+                    # We look at issue_log_updates explicitly to match your new schema
+                    generated_advice = log_update.get('ai_advice', 'No advice recorded.')
+                    print(f"  - APPEND TO issue_log.csv: {target_date} | {log_update.get('exercise')} | {mg} | {log_update.get('issue_type', 'Problem')} | {log_update.get('description', '')} | Active | \"{generated_advice}\"")
+
+    else:
+        # If there are no AI interventions, we can go ahead and print/commit the Fast Path
+        if fast_path_updates:
+            print("\n✅ FAST PATH (DETERMINISTIC INCREMENTS):")
+            for update in fast_path_updates:
+                print(f"  - {update['exercise']} (Set {update['order']}): target updated to {update['new_target_weight_kg']}kg x {update['new_target_reps']}")
 
 if __name__ == "__main__":
     api_key = os.environ.get("GROQ_API_KEY")
@@ -360,6 +435,6 @@ if __name__ == "__main__":
         print("Error: GROQ_API_KEY environment variable not found.")
         print("Run this in your terminal first: $env:GROQ_API_KEY=\"your_key_here\"")
     else:
-        run_pipeline('2026-01-27', api_key)
+        run_pipeline('2026-01-25', api_key)
 
 #very poor,very high,high,poor,high,high,Poor recovery and noticeable soreness before training.
