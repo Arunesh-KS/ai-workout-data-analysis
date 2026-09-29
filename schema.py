@@ -29,31 +29,6 @@ class ExerciseAdjustment(BaseModel):
     ai_instructions: str
 
 # ============================================================
-# INVESTIGATION STATE (LIGHTWEIGHT)
-# ============================================================
-
-class InvestigationState(BaseModel):
-    """
-    Ultra-compact memory of the investigation.
-    """
-    active_hypotheses: List[str] = Field(
-        default_factory=list,
-        description="List of the exact cause IDs still under investigation."
-    )
-    ruled_out_hypotheses: List[str] = Field(
-        default_factory=list,
-        description="List of the exact cause IDs that have been eliminated."
-    )
-    established_facts: str = Field(
-        default="",
-        description="CRITICAL MEMORY: Dense bulleted list of exact numbers, weights, and plan details."
-    )
-    unresolved_questions: str = Field(
-        default="",
-        description="What specific information is still missing?"
-    )
-
-# ============================================================
 # COMMANDS
 # ============================================================
 
@@ -107,19 +82,13 @@ AgentAction = Annotated[
 ]
 
 # ============================================================
-# MASTER RESPONSE
+# MASTER RESPONSE (MESSAGE APPEND MODE)
 # ============================================================
 
 class AgentResponse(BaseModel):
     """
-    Complete response from the AI.
+    Complete response from the AI containing only actions.
     """
-    # 1. THINK FIRST: The AI must update its whiteboard before issuing commands.
-    investigation_state: InvestigationState = Field(
-        description="Updated compact state of the investigation."
-    )
-    
-    # 2. ACT SECOND: Issue commands based on the updated state.
     actions: List[AgentAction] = Field(
         description="One or more commands to execute this turn."
     )
