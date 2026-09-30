@@ -37,8 +37,9 @@ def get_issue_history(muscle_group, filepath='issue_log.csv'):
     except FileNotFoundError:
         return {"active_issues": [], "past_rectified_issues": []}
     
-    mg_issues = issues[issues['muscle_group'] == muscle_group].fillna("")
-    active = mg_issues[mg_issues['status'] == 'Active']
+    #mg_issues = issues[issues['muscle_group'] == muscle_group].fillna("")
+    mg_issues=issues
+    active = issues[mg_issues['status'] == 'Active']
     rectified = mg_issues[mg_issues['status'] == 'Rectified']
     
     return {
@@ -155,8 +156,103 @@ def fetch_session_context(target_date: str) -> dict:
         "nutrition": "unknown", "stress": "unknown", "soreness_pain": "unknown", 
         "other_notes": "No data recorded for this session."
     }
+import re
 
+def prune_exercise_history(messages, exercise_name: str, replace_note: str):
+    """
+    Targets the specific exercise inside 'pre_fetched_exercise_history' within the JSON string 
+    and replaces its raw data array/dict with a concise replace note.
+    """
+    found_any = False
+    for msg in messages[1:]:
+        if "content" in msg and isinstance(msg["content"], str):
+            # Target the key-value pair for this specific exercise inside the JSON structure
+            # e.g., "squats": [ ... ] or "squats": { ... }
+            pattern = rf'(["\']?{exercise_name}["\']?\s*:\s*(?:\[.*?\]|\{{.*?\}}))'
+            
+            replacement_text = f'"{exercise_name}": "[PRUNED: {replace_note}]"'
+            
+            new_content, count = re.subn(pattern, replacement_text, msg["content"], flags= re.DOTALL | re.IGNORECASE)
+            if count > 0:
+                msg["content"] = new_content
+                found_any = True
+                
+    if found_any:
+        print(f"🧹 JSON-pruned history for exercise '{exercise_name}'.")
+    else:
+        messages[-1]["content"] += f"\n[NOTE ON {exercise_name.upper()}]: {replace_note}"
+        print(f"⚠️ Exercise '{exercise_name}' key not found in JSON payload; appended note.")
 
+def prune_previous_plan(messages, replace_note: str):
+    """
+    Targets 'pre_fetched_current_plan' (or general plan keys) in the JSON payload 
+    and clears its bulky data.
+    """
+    found_any = False
+    for msg in messages[1:]:
+        if "content" in msg and isinstance(msg["content"], str):
+            # Target the pre_fetched_current_plan key in the JSON
+            pattern = r'(["\']?pre_fetched_current_plan["\']?\s*:\s*(?:\[.*?\]|\{{.*?\}}|null|["\'].*?["\']))'
+            
+            replacement_text = f'"pre_fetched_current_plan": "[PRUNED PREVIOUS PLAN: {replace_note}]"'
+            
+            new_content, count = re.subn(pattern, replacement_text, msg["content"], flags=re.DOTALL | re.IGNORECASE)
+            if count > 0:
+                msg["content"] = new_content
+                found_any = True
+                
+    if found_any:
+        print(f"🧹 JSON-pruned previous plan data.")
+    else:
+        messages[-1]["content"] += f"\n[PREVIOUS PLAN NOTE]: {replace_note}"
+        print(f"⚠️ 'pre_fetched_current_plan' key not found in JSON payload; appended note.")
+
+import json
+
+def filter_issue_history(messages, relevant_ids: list[int], replace_note: str):
+    """
+    Filters issue history across the message stack, keeping only the IDs specified 
+    in relevant_ids and replacing the rest with the replace_note.
+    """
+    found_any = False
+    
+    for msg in messages[1:]:
+        if "content" in msg and isinstance(msg["content"], str):
+            try:
+                # Try to parse the message content as JSON if it represents the full payload dict
+                payload = json.loads(msg["content"])
+                
+                # Check if issue keys exist in this payload
+                if "active_issues" in payload or "past_rectified_issues" in payload:
+                    # Filter active issues
+                    if "active_issues" in payload:
+                        payload["active_issues"] = [
+                            issue for issue in payload["active_issues"] 
+                            if int(issue.get("id", -1)) in relevant_ids
+                        ]
+                    
+                    # Filter past rectified issues
+                    if "past_rectified_issues" in payload:
+                        payload["past_rectified_issues"] = [
+                            issue for issue in payload["past_rectified_issues"] 
+                            if int(issue.get("id", -1)) in relevant_ids
+                        ]
+                    
+                    # Attach the explanatory note
+                    payload["issue_history_filter_note"] = replace_note
+                    
+                    # Serialize back to the message content string
+                    msg["content"] = json.dumps(payload, indent=2)
+                    found_any = True
+            except json.JSONDecodeError:
+                # Fallback if the message isn't pure JSON
+                continue
+                
+    if found_any:
+        print(f"🧹 Successfully filtered issue history keeping IDs: {relevant_ids}")
+    else:
+        messages[-1]["content"] += f"\n[ISSUE HISTORY FILTER NOTE]: {replace_note}"
+        print(f"⚠️ Could not parse JSON payload for issue filtering; appended note.")
 # ==========================================
 # 3. THE AGENTIC LOOP (MESSAGE APPEND MODE)
 # ==========================================
@@ -170,83 +266,79 @@ def call_ai_coach(initial_user_message,ai_payload, client):
     valid_exercises = get_user_exercise_catalog()
     
     system_prompt = f"""
-    You are an expert strength coach investigating a user's stalled progress,
-performance decline, or reported training problem.
+    You are an expert strength coach investigating stalled progress, performance decline, or reported training problems.
+Do not prescribe immediately. First inspect the available evidence, form plausible hypotheses, gather the most useful missing information, then decide whether intervention is justified.
 
-Your job is NOT to immediately prescribe a solution. Your job is to
-investigate the available evidence, form plausible hypotheses, gather
-the most useful missing information, and only then decide whether an
-intervention is justified.
-
-
---------------------------------------------------
 AVAILABLE COMMANDS
---------------------------------------------------
-1. "QUERY_DATABASE": Look up recent performance history for a specific exercise. The history for flagged exercises and the current workout plan are ALREADY provided below under pre_fetched_exercise_history and pre_fetched_current_plan. Do NOT use QUERY_DATABASE or QUERY_PLAN for these exercises , so you can use this command only if you need to look up additional exercises that are relevant to the investigation.
-2. "ASK_USER": Ask the user for highly specific information.
-3. "QUERY_PLAN": Look up the user's "previous" workout plan , when relevant to the investigation . current plan is already provided in the initial payload, so you can use this command only if you need to look up the previous plan for context.
-4. "FINALIZE_DIAGNOSIS": Finish the investigation and prescribe target adjustments or maintain current targets.
---------------------------------------------------
-INVESTIGATION PRINCIPLES
---------------------------------------------------
-    1. RETRIEVE BEFORE ASKING
-If the information may already exist in the database or workout-plan
-history, retrieve it before asking the user.
-Do not ask the user for information that can be obtained through a tool.
 
-The user's baseline lifestyle factors for this specific workout are ALREADY 
-provided in the initial payload under `global_session_context`.
-- You MUST read this context first. 
-- Do NOT use the ASK_USER tool to ask about sleep, nutrition, general fatigue, 
-  overall stress, or general soreness. That data is already in front of you.
-- ONLY use the ASK_USER tool if you need highly specific mechanical details 
-  (e.g., "Where exactly in the elbow does it hurt during the pushdown?"). or if you need to clarify a specific recent event that may have affected training. or if you need more info regarding the user's lifestyle context that is not already provided in the initial payload.
+1. `QUERY_DATABASE`
+   Look up recent performance history for an exercise.
+   Flagged-exercise history is already provided in `pre_fetched_exercise_history`, so do not query those exercises again. Use this only for additional relevant exercises.
 
-2. DO NOT FORCE A DIAGNOSIS
-If the evidence is insufficient, continue investigating.
-Explicitly distinguish between:
-- strongly supported explanation
-- plausible explanation
-- unresolved possibility
+2. `ASK_USER`
+   Ask for specific information not available in the provided data.
 
-3. INVESTIGATE PATTERNS, NOT JUST INDIVIDUAL EXERCISES
-When an exercise stalls or declines, determine whether the problem is isolated
-or affecting several related lifts. You may query multiple relevant exercises
-in a single turn to evaluate this pattern efficiently.
+3. `QUERY_PLAN`
+   Query the user's previous workout plan when relevant. The current plan is already provided, so do not query it.
 
-4. ALWAYS CONSIDER RECENT PROGRAM CHANGES
-Use QUERY_PLAN to inspect current or previous structures when relevant.
+4. `FINALIZE_DIAGNOSIS`
+   Finish the investigation and prescribe target adjustments or maintain current targets.
 
-5. CONSIDER TEMPORARY VS PERSISTENT PROBLEMS
-A single bad session does not automatically justify changing targets.
-Distinguish acute flukes from chronic trends.
+5. `REMOVE_HISTORY`
+   Remove exercise history from the active context only after determining it is no longer relevant. Always provide a concise `replace_note` explaining why it can be removed. Do not remove it prematurely.
 
-6. EVERY PRESCRIPTION MUST BE EVIDENCE-BASED
-Make sure you have investigated an exercise's history before adjusting it.
+6. `REMOVE_PREVIOUS_PLAN`
+   Remove the previous plan only after the plan comparison is complete and it is no longer relevant. Always provide a concise `replace_note`.
 
-7. PAIN REQUIRES CAUTION
-Use language like "may be contributing" or "is consistent with".
-Never claim a definitive medical diagnosis.
+INVESTIGATION RULES
 
-8. in user's workout plan , the column called order corresponds to the global order of the exercise in the plan. The column called set_index corresponds to the local order of the set within that exercise on that day. Use these two columns carefully when referencing specific sets. note that different sets of the same exercise on the same day may have different target weights, reps, and RIR. Always reference the correct set by its local set_index when making adjustments . the stall may occur on one set of an exercise but not on another set of the same exercise. always reference the correct set by its local set_index when making adjustments.it may also occur on all the sets .
+1. Retrieve before asking.
+   If information may already exist in the database or plan history, retrieve it before asking the user. Do not ask for information available through tools.
 
---------------------------------------------------
+The initial payload already contains `global_session_context`.
+Do not ask about sleep, nutrition, general fatigue, stress, or general soreness. Ask only for specific mechanical details, recent events, or lifestyle information not already provided.
+
+Before using `QUERY_DATABASE`, check `pre_fetched_exercise_history`. If the exercise is already there, use that data instead of querying it.
+
+2. Do not force a diagnosis.
+   If evidence is insufficient, continue investigating. Distinguish between:
+
+* strongly supported
+* plausible
+* unresolved
+
+3. Investigate patterns, not only individual exercises.
+   Determine whether the problem is isolated or affects related exercises. Independent database queries may be batched.
+
+4. Distinguish temporary from persistent problems.
+   One bad session does not automatically justify changing targets. do not change target if the issue is external factors like sleep , nutrition , change in gym env , grip issue / machine issues , etc . act rationally and change only when required .
+
+5. Plan set/order handling.
+   In the workout plan:
+
+* `order` = global exercise/set sequence within the workout
+* `set_index` = local set number for that exercise
+
+Different sets of the same exercise may have different targets, reps, weights, or RIR. Always reference the correct `set_index` when making adjustments. A problem may affect one set or all sets.
+
+6. Context removal.
+   When removing exercise history, issue history, or the previous plan, always provide a concise `replace_note`, to explain why the data is being removed , and conclusions , etc . Remove data only after determining it is no longer relevant.
+   if you are handling multiple exercises, you may remove the history of exercises for which you have already determined the cause , which you could add to the replace_note .
 DATABASE DIRECTORY
---------------------------------------------------
-When using QUERY_DATABASE, you MUST select the exact exercise name from:
-{valid_exercises}
 
-and more importantly , you must check the pre_fetched_exercise_history in the initial payload first before using QUERY_DATABASE for any of these exercises. if the exercise is already in pre_fetched_exercise_history, you must use that data instead of querying the database again.
+When using `QUERY_DATABASE`, use the exact exercise name from:
+`{valid_exercises}`
 
---------------------------------------------------
 OUTPUT FORMAT
---------------------------------------------------
-You MUST respond in strict JSON format matching this exact schema:
-{schema_instructions}
 
-MULTI-QUERY BATCHING:
-You may include MULTIPLE actions in the "actions" array if you need data on
-multiple exercises or need both the database and plan details at once.
+Respond in strict JSON matching:
+`{schema_instructions}`
+
+MULTI-QUERY BATCHING
+
+You may include multiple independent actions in `actions`, such as:
+QUERY_DATABASE for multiple exercises, QUERY_PLAN , ASK_USER. However, do not batch actions when one depends on the result of another.
+Do not batch actions when one depends on the result of another.
 """
     
 
@@ -264,12 +356,12 @@ multiple exercises or need both the database and plan details at once.
     
     while True:
         try:
-            time.sleep(2) # Throttle to respect rate limits
+            time.sleep(5) # Throttle to respect rate limits
             
             response = client.chat.completions.create(
                 model="openai/gpt-oss-20b", 
                 messages=messages,
-                temperature=0.5,
+                temperature=0.2,
                 response_format={"type": "json_object"}
             )
             
@@ -314,6 +406,13 @@ multiple exercises or need both the database and plan details at once.
                     print(f"Total Output Tokens: {total_output_tokens}")
                     print(f"Number of User Interactions: {interaction_count}")
                     return action.model_dump()
+                elif action.action_type == "REMOVE_HISTORY":
+                    prune_exercise_history(messages, action.exercise, action.replace_note)
+                    system_results.append(f"System: Successfully removed raw history for {action.exercise}.")
+
+                elif action.action_type == "REMOVE_PREVIOUS_PLAN":
+                    prune_previous_plan(messages, action.replace_note)
+                    system_results.append(f"System: Successfully removed previous plan details.")
 
             # 3. 📜 MESSAGE APPEND: Append assistant turn and tool results to history
             if system_results:

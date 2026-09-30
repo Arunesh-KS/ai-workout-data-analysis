@@ -66,6 +66,16 @@ class CommandFinalize(BaseModel):
     issue_log_updates: List[IssueLogUpdate] = Field(
         description="Always provide an issue-log conclusion."
     )
+class CommandRemoveHistory(BaseModel):
+    """Prune raw exercise history from the active context once it's cleared."""
+    action_type: Literal["REMOVE_HISTORY"]
+    exercise: str = Field(description="The exercise history to strip away.")
+    replace_note: str = Field(description="A 1-sentence static note confirming the status of this exercise.")
+
+class CommandRemovePreviousPlan(BaseModel):
+    """Prune legacy plan details once the program comparison is complete."""
+    action_type: Literal["REMOVE_PREVIOUS_PLAN"]
+    replace_note: str = Field(description="A concise note summarizing the volume delta (e.g., 'Old plan had 2 sets, new plan has 1 set').")
 
 # ============================================================
 # ACTION UNION
@@ -76,7 +86,9 @@ AgentAction = Annotated[
         CommandQueryDatabase,
         CommandAskUser,
         CommandQueryPlan,
-        CommandFinalize
+        CommandFinalize,
+        CommandRemoveHistory,
+        CommandRemovePreviousPlan
     ],
     Field(discriminator="action_type")
 ]
