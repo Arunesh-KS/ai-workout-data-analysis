@@ -85,10 +85,14 @@ AgentAction = Annotated[
 # MASTER RESPONSE (MESSAGE APPEND MODE)
 # ============================================================
 
+# ============================================================
+# MASTER RESPONSE (WITH ROLLING SUMMARY)
+# ============================================================
+
 class AgentResponse(BaseModel):
-    """
-    Complete response from the AI containing only actions.
-    """
+    master_context_summary: str = Field(
+        description="A comprehensive summary of BOTH the initial workout data (all exercises, targets, RIR) AND the investigation so far. You MUST retain exact numbers (weights/reps). This will completely replace the initial data for the next turn."
+    )
     actions: List[AgentAction] = Field(
         description="One or more commands to execute this turn."
     )

@@ -318,9 +318,16 @@ multiple exercises or need both the database and plan details at once.
             # 3. 📜 MESSAGE APPEND: Append assistant turn and tool results to history
             if system_results:
                 combined_results = "\n---\n".join(system_results)
-                
+                ai_summary = parsed_envelope.master_context_summary
+
+# Keep ONLY the System Prompt (Rules, Schemas, Tools)
+                messages = [messages[0]]
                 # Append assistant response to preserve history
                 messages.append({"role": "assistant", "content": response_content})
+                messages.append({
+                "role": "system",
+                "content": f"CURRENT STATE SUMMARY (Baseline Data + Investigation):\n{ai_summary}"
+                })
                 # Append tool/user feedback as next user message
                 messages.append({"role": "user", "content": f"SYSTEM RESULTS / USER UPDATE:\n{combined_results}"})
                 
