@@ -33,7 +33,11 @@ class ProgressionEngine:
             muscle_group = log_row['muscle_group']
 
             # 1. 🐛 FIX: Get all planned rows for this exercise and sort them by global order
-            plan_sets = plan[plan['exercise'] == exercise].sort_values('order')
+            plan_sets = plan[
+                (plan['plan_id'] == log_row['plan_id']) &
+                (plan['day_name'] == log_row['day_name']) &
+                (plan['exercise'] == exercise)
+            ].sort_values('order')
             
             # If the user logged more sets than planned, skip the extra ones
             if len(plan_sets) < set_index:

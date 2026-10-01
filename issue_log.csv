@@ -1,10 +1,9 @@
 id,date_flagged,exercise,muscle_group,issue_type,description,status,ai_advice
-1,2026-01-18,barbell_bench_press,Push,Stall,"Performance has not progressed beyond 80kg despite repeated exposure. Latest session reached 8 and 7 reps.",Active,
-2,2026-01-18,dumbell_bench_press,Push,Decline,"Dropped from 30kg x 10,10 to 30kg x 9,9 with no problem recorded.",Active,
-3,2026-01-18,seated_overhead_dumbell_press,Push,Stall,"Performance remained at 22.5kg and declined from 8,8 to 8,7 reps.",Active,
-4,2026-01-18,Lateral_raises,Push,Problem,"Mild right shoulder pain appeared during later repetitions.",Active,
-5,2026-01-18,weighted_dips,Push,Problem,"Mild left shoulder discomfort reported at the bottom position.",Active,
-6,2026-01-20,weighted_pullups,Pull,Stall,"Performance repeated at +20kg for 7,6 reps across sessions without upward progression.",Active,
-7,2026-01-20,lat_pulldowns,Pull,Decline,"Dropped from 65kg x 10,10 to 65kg x 9,9 with no problem recorded.",Active,
-8,2026-01-27,squats,Legs,Sudden Decline,"Performance dropped from 100kg x 6,6 to 100kg x 3 on the latest session with no problem recorded.",Active,
-9,2026-01-27,romanian_deadlift,Legs,Decline,"Dropped from 90kg x 8,8 to 90kg x 6 on the latest session.",Active,
+1,2025-10-14,squats,Legs,Problem,"Dull ache in the left patellar tendon during heavy sets above 90kg.",Rectified,"Rest for 1 week and incorporate patellar tendon mobilization before squatting."
+2,2025-11-05,romanian_deadlift,Legs,Stall,"Stalled at 85kg for 4 consecutive sessions due to grip slipping.",Rectified,"Adopt mixed grip or lifting straps to bypass forearm fatigue limitation."
+3,2025-12-02,bulgarian_split_squats,Legs,Problem,"Right hip flexor pinch at the bottom of the movement.",Rectified,"Reduce front foot elevation and focus on a vertical shin angle to clear impingement."
+4,2025-01-18,barbell_bench_press,Push,pain,"elbow pain at lowest point",Rectified,"fixed form by changing elbow angle "
+6,2026-01-18,Lateral_raises,Push,Problem,"Mild right shoulder pain appeared during later repetitions.",Active,"Drop weight by 2kg and strictly avoid going above shoulder height."
+7,2026-01-20,weighted_pullups,Pull,Stall,"Performance repeated at +20kg for 7,6 reps across sessions without upward progression.",Active,"Incorporate eccentric overload or adjust rest periods."
+8,2026-01-14,squats,Legs,Problem,"Sharp patellar tendon pinch felt on the right knee during the descent, echoing the late 2025 issue.",Rectified,"Reduce squat depth slightly, monitor knee tracking, and take extra warm-up sets."
+9,2026-01-27,romanian_deadlift,Legs,stall/Regression,"Fell short on RDL set 1 (2 reps at 90kg vs 6 target reps) due to upper back soreness from a preceding upper-body session affecting spinal bracing.",Active,"Ensure adequate recovery between upper and lower body sessionsto prevent residual upper back fatigue from compromising posterior chain loading."

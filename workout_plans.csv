@@ -24,11 +24,10 @@ plan_001,Legs,5,leg_curls,10,15,2,5.0,40.0,12,2026-01-01,2026-01-23
 plan_001,Legs,6,leg_curls,10,15,1,5.0,40.0,12,2026-01-01,2026-01-23
 plan_001,Legs,7,bulgarian_split_squats,8,12,2,2.5,20.0,10,2026-01-01,2026-01-23
 plan_001,Legs,8,bulgarian_split_squats,8,12,1,2.5,20.0,10,2026-01-01,2026-01-23
-plan_002,Upper_A,1,barbell_bench_press,4,7,2,2.5,82.5,8,2026-01-24,
+plan_002,Upper_A,1,barbell_bench_press,4,7,1,2.5,85,4,2026-01-24,
 plan_002,Upper_A,2,weighted_pullups,4,8,2,2.5,22.5,4,2026-01-24,
-plan_002,Upper_A,3,seated_overhead_dumbell_press,6,10,2,2.5,22.5,8,2026-01-24,
 plan_002,Upper_A,4,chest_supported_rows,8,12,2,2.5,45.0,11,2026-01-24,
-plan_002,Upper_A,5,weighted_dips,6,10,1,2.5,20.0,8,2026-01-24,
+plan_002,Upper_A,5,barbell_bench_press,6,10,0,2.5,6,8,2026-01-24,
 plan_002,Upper_A,6,Lateral_raises,12,20,1,1.25,10.0,15,2026-01-24,
 plan_002,Upper_A,7,tricep_pushdown,10,15,1,2.5,27.5,12,2026-01-24,
 plan_002,Upper_A,8,standing_bicep_curls,8,12,1,2.5,15.0,10,2026-01-24,
